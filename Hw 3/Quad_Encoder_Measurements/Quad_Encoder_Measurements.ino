@@ -9,6 +9,9 @@
 #define ENC_B 19
 #define CPR   48.0  // counts per revolution:
 
+// Write Cutoff Time (ms)
+#define CUTOFF_TIME 1000
+
 // Delays
 #define SERIAL_WRITE_DELAY 10
 
@@ -18,6 +21,7 @@ unsigned long SerialWriteRuntime = 0;
 
 int pwmSpeed = 255;
 int motorDirection = 0;
+int isStopped = 0;
 
 ///////////
 // Setup //
@@ -50,7 +54,7 @@ void setup() {
 //////////
 void loop() {
   // Take a lot of readings
-  if(millis() >= SerialWriteRuntime)
+  if(millis() >= SerialWriteRuntime && !isStopped)
   {
     SerialWriteRuntime = millis() + SERIAL_WRITE_DELAY;
     Serial.print(millis());
@@ -60,6 +64,17 @@ void loop() {
     Serial.println(countsToRadians(encodercount));
     return;
   }
+  
+  // Only run/compile cutoff bit if the cutoff time is greater than 0
+  #if (CUTOFF_TIME > 0)
+  // Stop time
+  if(millis() >= CUTOFF_TIME && isStopped == 0)
+  {
+    isStopped = 1;
+    digitalWrite(PWM_PIN,0);
+    return;
+  }
+  #endif
 }
 
 //////////////////////////////
