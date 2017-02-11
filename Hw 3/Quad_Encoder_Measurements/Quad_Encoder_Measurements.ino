@@ -1,12 +1,12 @@
 // Pin Definitions
 #define SENSOR_PIN 0
-#define DIR_PIN    2
-#define PWM_PIN    3
+#define DIR_PIN    8 //2
+#define PWM_PIN    9 //3
 #define LED_PIN    13
 
 // Encoder Definitions
-#define ENC_A 18
-#define ENC_B 19
+#define ENC_A 2 //28
+#define ENC_B 3 //19
 #define CPR   48.0  // counts per revolution:
 
 // Write Cutoff Time (ms)
