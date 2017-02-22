@@ -10,7 +10,7 @@
 #define CPR   48.0  // counts per revolution:
 
 // Write Cutoff Time (ms)
-#define CUTOFF_TIME 1000
+#define CUTOFF_TIME 5000
 
 // Delays
 #define SERIAL_WRITE_DELAY 10

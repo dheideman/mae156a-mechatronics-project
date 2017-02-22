@@ -17,10 +17,6 @@
 // Write Cutoff Time (ms)
 #define CUTOFF_TIME 1000
 
-// Velocity Drop Threshold
-#define VELDROP_THRESHOLD   0.99
-#define VELCOUNT_THRESHOLD  3
-
 // Delays
 #define SERIAL_WRITE_DELAY 10
 
@@ -28,7 +24,6 @@
 long encodercount = 0;
 
 int motorSpeed = 100;   // Percent
-int veldropcounter = 0;
 int isStopped = 0;
 
 // Runtime (timer) Variables
@@ -91,28 +86,6 @@ void loop()
     float x = countsToRadians(encodercount);
     float v = calculateVelocity(&velstruct,t,x);
     velfilter.step(v);
-
-    // Check if velocity has fallen below threshold
-    if ( v < velfilter.getLastOutput()*VELDROP_THRESHOLD )
-    //if ( velstruct.v[0] < velstruct.v[1]*VELDROP_THRESHOLD )
-    {
-      // Increment counter
-      veldropcounter++;
-      Serial.println(veldropcounter);
-
-      // Check if we've seen enough consecutively low values to stop
-      if ( veldropcounter >= VELCOUNT_THRESHOLD )
-      {
-        Serial.println("Velocity Drop Detected");
-        stopMotor();
-      }
-    }
-    else
-    {
-      // Clear counter if we're above the filtered value again.
-      veldropcounter = 0;
-    }
-
     return;
   }
 
@@ -124,7 +97,6 @@ void loop()
     Serial.print(",");
     Serial.print(velstruct.v[0]);
     Serial.print(",");
-    //Serial.println(velstruct.v[1]);
     Serial.println(velfilter.getLastOutput());
     return;
   }
