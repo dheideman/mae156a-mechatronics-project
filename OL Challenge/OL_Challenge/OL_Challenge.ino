@@ -11,15 +11,15 @@
 #define CPR   48.0  // counts per revolution:
 
 // Velocity Low-Pass Filter Constants
-#define FILTER_DT   0.005
-#define FILTER_TAU  0.05
+#define FILTER_DT   0.005 // seconds
+#define FILTER_TAU  0.05  // seconds
 
 // Write Cutoff Time (ms)
 #define CUTOFF_TIME 1000
 
 // Velocity Drop Threshold
-#define VELDROP_THRESHOLD   0.99
-#define VELCOUNT_THRESHOLD  3
+#define VELDROP_THRESHOLD   0.99  // Percent
+#define VELCOUNT_THRESHOLD  3     // Consecutive measurements below
 
 // Delays
 #define SERIAL_WRITE_DELAY 10
@@ -38,9 +38,9 @@ unsigned long FilterRuntime = 0;
 // Velocity struct
 typedef struct velstruct_t
 {
-  float x[2];
-  float t[2];
-  float v[2];
+  float x[2]; // radians
+  float t[2]; // seconds
+  float v[2]; // rad/s
 };
 velstruct_t velstruct;
 
