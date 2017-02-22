@@ -1,4 +1,4 @@
-#include <DiscreteFilter.h>
+PWM_Pin#include <DiscreteFilter.h>
 
 // Pin Definitions
 #define SENSOR_PIN 0
@@ -27,8 +27,7 @@
 // Variable Declarations
 long encodercount = 0;
 
-int pwmSpeed = 255;
-int motorDirection = 0;
+int motorSpeed = 100;   // Percent
 int veldropcounter = 0;
 int isStopped = 0;
 
@@ -71,9 +70,8 @@ void setup() {
   delay(10);
 
   // Start motor
-  digitalWrite(DIR_PIN,motorDirection);
-  analogWrite(PWM_PIN,pwmSpeed);
-  
+  setMotor(motorSpeed);
+
   // Start serial connection
   Serial.begin(250000);
   //Serial.println("Time (ms), Encoder Ticks, Angle (deg)");
@@ -96,12 +94,12 @@ void loop()
 
     // Check if velocity has fallen below threshold
     if ( v < velfilter.getLastOutput()*VELDROP_THRESHOLD )
-    //if ( velstruct.v[0] < velstruct.v[1]*VELDROP_THRESHOLD ) 
+    //if ( velstruct.v[0] < velstruct.v[1]*VELDROP_THRESHOLD )
     {
       // Increment counter
       veldropcounter++;
       Serial.println(veldropcounter);
-      
+
       // Check if we've seen enough consecutively low values to stop
       if ( veldropcounter >= VELCOUNT_THRESHOLD )
       {
@@ -114,10 +112,10 @@ void loop()
       // Clear counter if we're above the filtered value again.
       veldropcounter = 0;
     }
-    
+
     return;
   }
-  
+
   // Take a lot of readings
   if(millis() >= SerialWriteRuntime && !isStopped)
   {
@@ -130,7 +128,7 @@ void loop()
     Serial.println(velfilter.getLastOutput());
     return;
   }
-  
+
   // Only run/compile cutoff bit if the cutoff time is greater than 0
   #if (CUTOFF_TIME > 0)
   // Stop time
@@ -148,7 +146,7 @@ void loop()
 
 /*******************************************************************************
 * void handleEncoderA()
-* 
+*
 * Encoder interrupt handler
 *******************************************************************************/
 void handleEncoderA()
@@ -156,13 +154,13 @@ void handleEncoderA()
   // Standard read
   int encA = digitalRead(ENC_PIN_A);
   int encB = digitalRead(ENC_PIN_B);
-  
+
   encodercount += 2*(encA ^ encB) - 1;
 }
 
 /*******************************************************************************
 * void handleEncoderB()
-* 
+*
 * Encoder interrupt handler
 *******************************************************************************/
 void handleEncoderB()
@@ -176,7 +174,7 @@ void handleEncoderB()
 
 /*******************************************************************************
 * float countsToRadians(long counts)
-* 
+*
 * Convert encoder counts to radians
 *******************************************************************************/
 float countsToRadians(long counts)
@@ -186,7 +184,7 @@ float countsToRadians(long counts)
 
 /*******************************************************************************
 * float countsToDegrees(long counts)
-* 
+*
 * Convert encoder counts to degrees
 *******************************************************************************/
 float countsToDegrees(long counts)
@@ -196,7 +194,7 @@ float countsToDegrees(long counts)
 
 /*******************************************************************************
 * void stopMotor()
-* 
+*
 * Stop the motor, set flag "isStopped"
 *******************************************************************************/
 void stopMotor()
@@ -206,8 +204,34 @@ void stopMotor()
 }
 
 /*******************************************************************************
+* void setMotor()
+*
+* Set the motor to a speed and direction
+* Has saturation protection
+*******************************************************************************/
+float setMotor(float motorSpeed)
+{
+  // Set motor direction
+  if (motorSpeed>0){digitalWrite(DIR_PIN,LOW);}
+  else{digitalWrite(DIR_PIN,HIGH);}
+
+  // Saturation protection
+  if (motorSpeed>100){motorSpeed=100.0;}
+  if (motorSpeed<-100){motorSpeed=-100.0;}
+
+  // convert 0-100% to 0-255 duty cycle
+  int motorDuty = map(abs(motorSpeed),0,100,0,255);
+
+  // send PWM to motor
+  analogWrite(PWM_PIN,motorDuty);
+
+  // Return the actual controller output with saturation protection
+  return motorSpeed;
+}
+
+/*******************************************************************************
 * float calculateVelocity(velstruct_t* velstruct, float t, float x)
-* 
+*
 * Calculate the velocity for a velstruct_t struct
 * It's best to use time in seconds
 *******************************************************************************/
@@ -225,6 +249,5 @@ float calculateVelocity(velstruct_t* velstruct, float t, float x)
 
   velstruct->v[0] = dx/dt;
   return velstruct->v[0];
-  
-}
 
+}
