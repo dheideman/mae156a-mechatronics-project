@@ -1,4 +1,4 @@
-#include <DiscreteFilter.h>
+//#include <DiscreteFilter.h>
 
 // Pin Definitions
 #define SENSOR_PIN 0
@@ -9,10 +9,6 @@
 #define ENC_PIN_A 2 //28
 #define ENC_PIN_B 3 //19
 #define CPR   48.0  // counts per revolution:
-
-// Velocity Low-Pass Filter Constants
-#define FILTER_DT   0.005 // seconds
-#define FILTER_TAU  0.05  // seconds
 
 // Write Cutoff Time (ms)
 #define CUTOFF_TIME 1000
@@ -28,7 +24,6 @@ int isStopped = 0;
 
 // Runtime (timer) Variables
 unsigned long SerialWriteRuntime = 0;
-unsigned long FilterRuntime = 0;
 
 // Velocity struct
 typedef struct velstruct_t
@@ -38,9 +33,6 @@ typedef struct velstruct_t
   float v[2]; // rad/s
 };
 velstruct_t velstruct;
-
-// Filter Declaration
-DiscreteFilter velfilter;
 
 ///////////
 // Setup //
@@ -58,9 +50,6 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
-  // Initialize filter
-  velfilter.createFirstOrderLowPassFilter(FILTER_DT,FILTER_TAU);
-
   // delay a little to keep velocity calculator from going infinite
   delay(10);
 
@@ -69,7 +58,7 @@ void setup() {
 
   // Start serial connection
   Serial.begin(250000);
-  //Serial.println("Time (ms), Encoder Ticks, Angle (deg)");
+  //Serial.println("Time (ms), Encoder Ticks, Velocity (rad/s)");
 }
 
 //////////
@@ -77,27 +66,22 @@ void setup() {
 //////////
 void loop()
  {
-  // フィルタ第一! (Filter First!)
-  // Run the lp filter on the velocity, compare to velocity.  Stop if needed.
-  if(millis() >= FilterRuntime && !isStopped)
-  {
-    FilterRuntime = millis() + FILTER_DT*1000;
-    float t = float(micros())/1000000.0;
-    float x = countsToRadians(encodercount);
-    float v = calculateVelocity(&velstruct,t,x);
-    velfilter.step(v);
-    return;
-  }
-
   // Take a lot of readings
   if(millis() >= SerialWriteRuntime && !isStopped)
   {
     SerialWriteRuntime = millis() + SERIAL_WRITE_DELAY;
+    
+    // Calculate velocity
+    float t = float(micros())/1000000.0;
+    float x = countsToRadians(encodercount);
+    float v = calculateVelocity(&velstruct,t,x);
+    
+    // Write to serial port
     Serial.print(millis());
     Serial.print(",");
-    Serial.print(velstruct.v[0]);
+    Serial.print(encodercount);
     Serial.print(",");
-    Serial.println(velfilter.getLastOutput());
+    Serial.println(velstruct.v[0]);
     return;
   }
 
