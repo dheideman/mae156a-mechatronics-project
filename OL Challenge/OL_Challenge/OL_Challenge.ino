@@ -1,21 +1,29 @@
 //#include <DiscreteFilter.h>
 
 // Pin Definitions
-#define SENSOR_PIN 0
-#define DIR_PIN    8 //2
-#define PWM_PIN    9 //3
-#define TA_PIN     4 // pin to connect to TA arduino
+#define SENSOR_PIN  0
+#define DIR_PIN     8 //2
+#define PWM_PIN     9 //3
+#define TA_PIN      4 // pin to connect to TA arduino
+
+// Gear Ratio and Stop Angle
+#define GEAR_RATIO  11.95
+#define THETA_STOP  315    // degrees
+#define THETA_BUFF  45     // degrees
 
 // TA Delay
-#define TA_DELAY   0 // 5000
+#define TA_DELAY    5000
+
+// Start Delay
+#define START_DELAY 10
 
 // Encoder Definitions
-#define ENC_PIN_A 2 //28
-#define ENC_PIN_B 3 //19
-#define CPR   48.0  // counts per revolution:
+#define ENC_PIN_A   2 //18
+#define ENC_PIN_B   3 //19
+#define CPR      48.0  // counts per revolution:
 
 // Write Cutoff Time (ms)
-#define CUTOFF_TIME 500
+#define CUTOFF_TIME 1000
 
 // Delays
 #define SERIAL_WRITE_DELAY 10
@@ -23,8 +31,9 @@
 // Variable Declarations
 long encodercount = 0;
 
-int motorSpeed = 100;   // Percent
-int isStopped = 0;
+int motorSpeed  = 100;   // Percent
+int isStopped   = 0;
+int stopWriting = 0;
 
 // Runtime (timer) Variables
 unsigned long SerialWriteRuntime = 0;
@@ -49,25 +58,28 @@ void setup() {
 
   pinMode(DIR_PIN,OUTPUT);
   pinMode(PWM_PIN,OUTPUT);
+  pinMode(TA_PIN, OUTPUT);
 
   // Initialize interrupts for encoder readings
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
   // delay a little to keep velocity calculator from going infinite
-  delay(10);
+  delay(START_DELAY);
 
   // Tell the TAs that we're ready...
   digitalWrite(TA_PIN,LOW);
   delay(TA_DELAY);
   digitalWrite(TA_PIN,HIGH);
 
+  // Reset encoder value
+  encodercount = 0;
+
   // Start motor
   setMotor(motorSpeed);
 
   // Start serial connection
   Serial.begin(250000);
-  //Serial.println("Time (ms), Encoder Ticks, Velocity (rad/s)");
 }
 
 //////////
@@ -76,7 +88,7 @@ void setup() {
 void loop()
  {
   // Take a lot of readings
-  if(millis() >= SerialWriteRuntime && !isStopped)
+  if(millis() >= SerialWriteRuntime && !stopWriting)
   {
     SerialWriteRuntime = millis() + SERIAL_WRITE_DELAY;
     
@@ -86,21 +98,38 @@ void loop()
     float v = calculateVelocity(&velstruct,t,x);
     
     // Write to serial port
-    Serial.print(millis());
+    Serial.print(millis()-TA_DELAY);
     Serial.print(",");
     Serial.print(encodercount);
     Serial.print(",");
     Serial.println(velstruct.v[0]);
     return;
   }
-
+  
+  // Only run/compile cutoff bit if the stop angle is greater than 0
+  #if (THETA_STOP > 0)
+  // Stop time
+  if(countsToDegrees(encodercount)/GEAR_RATIO >= THETA_STOP && !stopWriting)
+  {
+    stopWriting = 1;
+    Serial.print("Time to Hit: ~");
+    Serial.print(millis()-TA_DELAY-START_DELAY);
+    Serial.print(" ms\n");
+  }
+  
+  if(countsToDegrees(encodercount)/GEAR_RATIO >= (THETA_STOP + THETA_BUFF) && isStopped == 0)
+  {
+    stopMotor();
+  }
+  
+  #endif
+  
   // Only run/compile cutoff bit if the cutoff time is greater than 0
   #if (CUTOFF_TIME > 0)
   // Stop time
-  if(millis() >= CUTOFF_TIME+TA_DELAY && isStopped == 0)
+  if(millis() >= CUTOFF_TIME+TA_DELAY+START_DELAY && isStopped == 0)
   {
     stopMotor();
-    return;
   }
   #endif
 }
@@ -154,7 +183,7 @@ float countsToRadians(long counts)
 *******************************************************************************/
 float countsToDegrees(long counts)
 {
-  return float(counts)*180.0/CPR;
+  return float(counts)*360.0/CPR;
 }
 
 /*******************************************************************************
@@ -164,6 +193,7 @@ float countsToDegrees(long counts)
 *******************************************************************************/
 void stopMotor()
 {
+  stopWriting = 1;
   isStopped = 1;
   digitalWrite(PWM_PIN,0);
 }
