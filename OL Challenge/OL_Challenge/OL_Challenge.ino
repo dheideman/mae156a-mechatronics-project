@@ -4,6 +4,10 @@
 #define SENSOR_PIN 0
 #define DIR_PIN    8 //2
 #define PWM_PIN    9 //3
+#define TA_PIN     4 // pin to connect to TA arduino
+
+// TA Delay
+#define TA_DELAY   0 // 5000
 
 // Encoder Definitions
 #define ENC_PIN_A 2 //28
@@ -11,7 +15,7 @@
 #define CPR   48.0  // counts per revolution:
 
 // Write Cutoff Time (ms)
-#define CUTOFF_TIME 1000
+#define CUTOFF_TIME 1500
 
 // Delays
 #define SERIAL_WRITE_DELAY 10
@@ -53,6 +57,11 @@ void setup() {
   // delay a little to keep velocity calculator from going infinite
   delay(10);
 
+  // Tell the TAs that we're ready...
+  digitalWrite(TA_PIN,LOW);
+  delay(TA_DELAY);
+  digitalWrite(TA_PIN,HIGH);
+
   // Start motor
   setMotor(motorSpeed);
 
@@ -88,7 +97,7 @@ void loop()
   // Only run/compile cutoff bit if the cutoff time is greater than 0
   #if (CUTOFF_TIME > 0)
   // Stop time
-  if(millis() >= CUTOFF_TIME && isStopped == 0)
+  if(millis() >= CUTOFF_TIME+TA_DELAY && isStopped == 0)
   {
     stopMotor();
     return;
