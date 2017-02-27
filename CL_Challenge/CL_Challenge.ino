@@ -15,6 +15,7 @@ Details:
 #define DIR_PIN     8 //2
 #define PWM_PIN     9 //3
 #define TA_PIN      4 // pin to connect to TA arduino
+#define START_PIN   5 // place momentary switch to ground
 
 // Encoder Definitions
 #define ENC_PIN_A   2 //18
@@ -42,7 +43,7 @@ Details:
 long encodercount = 0;
 
 int motorSpeed  = 100;   // Percent
-int isStopped   = 0;
+int isStopped   = 1;
 int stopWriting = 0;
 
 // Runtime (timer) Variables
@@ -74,8 +75,13 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
-  // delay a little to keep velocity calculator from going infinite
-  delay(START_DELAY);
+  // Wait for input from user
+  Serial.Println("Press start button");
+  while (isStopped==1)
+    {
+      isStopped = digitalRead(START_PIN);
+      delay(10);
+    }
 
   // Tell the TAs that we're ready...
   digitalWrite(TA_PIN,LOW);
