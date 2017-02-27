@@ -3,9 +3,9 @@ Closed Loop Challenge
 By Daniel Heideman and Stuart Sonatina
 MAE 156A - 2017-03-02
 Details:
-  1. Raise mass from bottom to -175 degrees.
-  2. Swing mass around +355 degrees to strike pendulum (at +180 degrees).
-  3. Follow-through and come to rest at 360 degrees (bottom) again
+  1. Raise mass from bottom to top (-175 degrees).
+  2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
+  3. Follow-through and come to rest at bottom again (360 degrees)
 
 */
 #include <DiscreteFilter.h>
@@ -24,8 +24,9 @@ Details:
 
 // Gear Ratio and Stop Angle
 #define GEAR_RATIO  4
-#define THETA_STOP  315    // degrees
-#define THETA_BUFF  45     // degrees
+#define THETA_TOP   -175  // degrees
+#define THETA_IMPACT 180  // degrees
+#define THETA_STOP  360   // degrees
 
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 5000 // (ms)
@@ -37,7 +38,7 @@ Details:
 // Variable Declarations
 long encoderCount = 0;
 unsigned long beginTime = 0;
-int motorSpeed  = 100;   // Percent
+int motorSpeed  = 0;  // Percent
 int isStopped   = 1;
 int stopWriting = 0;
 
@@ -100,7 +101,11 @@ void setup() {
 // Loop //
 //////////
 void loop()
- {
+{
+  // 1. Raise mass from bottom to top (-175 degrees).
+  // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
+  // 3. Follow-through and come to rest at bottom again (360 degrees)
+
   // Take a lot of readings
   if(millis() >= serialWriteRunTime && !stopWriting)
   {
@@ -130,17 +135,11 @@ void loop()
     Serial.print(millis()-TA_DELAY-beginTime);
     Serial.print(" ms\n");
   }
-
-  if(countsToDegrees(encoderCount)/GEAR_RATIO >= (THETA_STOP + THETA_BUFF) && isStopped == 0)
-  {
-    stopMotor();
-  }
-
   #endif
 
   // Only run/compile cutoff bit if the cutoff time is greater than 0
   #if (CUTOFF_TIME > 0)
-  // Stop time
+  // Stop motor if time has gone too long
   if(millis() >= CUTOFF_TIME+TA_DELAY+beginTime && isStopped == 0)
   {
     stopMotor();
