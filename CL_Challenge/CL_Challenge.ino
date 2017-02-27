@@ -20,9 +20,9 @@ Details:
 // Encoder Definitions
 #define ENC_PIN_A   2 //18
 #define ENC_PIN_B   3 //19
-#define CPR      48.0  // counts per revolution:
+#define CPR      48.0 // counts per revolution:
 
-// Gear Ratio and Stop Angle
+// Gear Ratio and transition angles
 #define GEAR_RATIO      4.0
 #define THETA_TOP    -175.0   // degrees
 #define THETA_IMPACT  180.0   // degrees
@@ -35,7 +35,10 @@ Details:
 #define SERIAL_WRITE_DELAY 10
 #define TA_DELAY    5000      // Wait for TA arduino
 
+// Controller info
+#define SAMPLE_TIME 100 // ms
 // Variable Declarations
+float setpoint;   // desired position
 float K_p = 0.5;  // proportional control const
 float K_i = 0;    // integral control const
 float K_d = 0;    // derivative control const
@@ -49,16 +52,18 @@ int stopWriting = 0;
 // Runtime (timer) Variables
 unsigned long serialWriteRunTime = 0;
 
-// Define velocity struct type
-typedef struct velstruct_t
+// Define state struct type
+typedef struct S_t
 {
-  float x[2]; // radians
-  float t[2]; // seconds
-  float v[2]; // rad/s
-} velstruct_t;
+  float theta[2];     // radians
+  float theta_dot[2]; // rad/s
+  float t[2];         // seconds
+  float u[2];         // output to motor
 
-// Create velocity structure
-velstruct_t velstruct;
+} S_t;
+
+// Create state structure
+S_t S;
 
 // Create controller
 //createPIDController(K_p, K_i, K_d, SAMPLE_TIME)
@@ -97,7 +102,7 @@ void setup() {
   // Reset encoder value
   encoderCount = 0;
 
-  // Set zero time
+  // Set zero time to use as offset
   beginTime = millis();
 
   // Start serial connection
@@ -109,33 +114,50 @@ void setup() {
 //////////
 void loop()
 {
-  // 1. Raise mass from bottom to top (-175 degrees).
-  // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
-  // 3. Follow-through and come to rest at bottom again (360 degrees)
-
+  // Sample position every SAMPLE_TIME
+  if(millis() >= SAMPLE_TIME && !stopWriting)
+  {
+    S.t[0] = float(micros())/1000000.0;
+    S.theta[0] = countsToRadians(encoderCount);
+    S.theta_dot[0] = calculateVelocity(&S,S.t[0],S.theta[0]);
+  }
+  /*switch(stage) // Still need to define stage
+  {
+    case 1: // 1. Raise mass from bottom to top (-175 degrees).
+    {
+      setpoint = -175;
+      break;
+    }
+    case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
+    {
+      while(S.theta[0] <= deg2rad(180)) {setMotor(100);}
+      break;
+    }
+    case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
+    {
+      setpoint = 0;
+      break;
+    }
+  }
+*/
   // Take a lot of readings
   if(millis() >= serialWriteRunTime && !stopWriting)
   {
     serialWriteRunTime = millis() + SERIAL_WRITE_DELAY;
-
-    // Calculate velocity
-    float t = float(micros())/1000000.0;
-    float x = countsToRadians(encoderCount);
-    float v = calculateVelocity(&velstruct,t,x);
 
     // Write to serial port
     Serial.print(millis()-TA_DELAY-beginTime);
     Serial.print(",");
     Serial.print(encoderCount);
     Serial.print(",");
-    Serial.println(velstruct.v[0]);
+    Serial.println(S.theta_dot[0]);
     return;
   }
 
   // Stop time (time at 360 +/- 1.5 degrees and velocity <= 10 deg/s)
-  if(theta >= THETA_STOP-1.5 &&
-    velstruct.v[0]*180.0/PI <= 10 &&
-
+  if(S.theta[0] >= THETA_STOP - 1.5 &&
+    S.theta[0] <= THETA_STOP + 1.5 &&
+    S.theta_dot[0] <= deg2rad(10) &&
     !stopWriting)
   {
     stopWriting = 1;
@@ -239,7 +261,7 @@ void stopMotor()
 }
 
 /*******************************************************************************
-* void setMotor()
+* float setMotor()
 *
 * Set the motor to a speed and direction
 * Has saturation protection
@@ -265,24 +287,23 @@ float setMotor(float motorSpeed)
 }
 
 /*******************************************************************************
-* float calculateVelocity(velstruct_t* velstruct, float t, float x)
+* float calculateVelocity(S_t* S, float t, float x)
 *
-* Calculate the velocity for a velstruct_t struct
+* Calculate the velocity for a S_t struct
 * It's best to use time in seconds
 *******************************************************************************/
-float calculateVelocity(velstruct_t* velstruct, float t, float x)
+float calculateVelocity(S_t* S, float t, float theta)
 {
   // Update values
-  velstruct->v[1] = velstruct->v[0];
-  velstruct->x[1] = velstruct->x[0];
-  velstruct->x[0] = x;
-  velstruct->t[1] = velstruct->t[0];
-  velstruct->t[0] = t;
+  S->theta_dot[1] = S->theta_dot[0];
+  S->theta[1]     = S->theta[0];
+  S->theta[0]     = theta;
+  S->t[1]         = S->t[0];
+  S->t[0]         = t;
 
-  float dx = velstruct->x[0] - velstruct->x[1];
-  float dt = velstruct->t[0] - velstruct->t[1];
+  float d_theta = S->theta[0] - S->theta[1];
+  float dt      = S->t[0] - S->t[1];
 
-  velstruct->v[0] = dx/dt;
-  return velstruct->v[0];
-
+  S->theta_dot[0] = d_theta/dt;
+  return S->theta_dot[0];
 }
