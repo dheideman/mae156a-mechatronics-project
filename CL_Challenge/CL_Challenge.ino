@@ -32,9 +32,9 @@ Details:
 #define CUTOFF_TIME 5000 // (ms)
 
 // Delays and periods
-#define SERIAL_WRITE_PERIOD 100 // ms
-#define TA_DELAY    5000      // ms Wait for TA arduino
-#define SAMPLE_PERIOD 100 // ms
+#define SERIAL_WRITE_PERIOD 100   // ms
+#define TA_DELAY            5000  // ms Wait for TA arduino
+#define SAMPLE_PERIOD       100   // ms
 
 // Variable Declarations
 float setpoint;   // desired position
@@ -75,7 +75,8 @@ void setup() {
   pinMode(SENSOR_PIN,INPUT);
   pinMode(ENC_PIN_A,INPUT);
   pinMode(ENC_PIN_B,INPUT);
-  digitalWrite(START_PIN, INPUT_PULLUP);  // set pullup on analog pin 5
+  pinMode(START_PIN, INPUT_PULLUP);
+  //digitalWrite(START_PIN, INPUT_PULLUP);  // set pullup on analog pin 5
   pinMode(DIR_PIN,OUTPUT);
   pinMode(PWM_PIN,OUTPUT);
   pinMode(TA_PIN, OUTPUT);
@@ -83,6 +84,9 @@ void setup() {
   // Initialize interrupts for encoder readings
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
+
+    // Start serial connection
+  Serial.begin(250000);
 
   // Wait for input from user
   Serial.println("Press start button");
@@ -102,9 +106,6 @@ void setup() {
 
   // Set zero time to use as offset
   beginTime = millis();
-
-  // Start serial connection
-  Serial.begin(250000);
 }
 
 //////////
