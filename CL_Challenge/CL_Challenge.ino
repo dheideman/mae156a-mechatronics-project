@@ -50,6 +50,7 @@ int stopWriting = 0;
 
 // Runtime (timer) Variables
 unsigned long serialWriteRunTime = 0;
+unsigned long sampleRunTime = 0;
 
 // Define state struct type
 typedef struct S_t
@@ -85,7 +86,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
-    // Start serial connection
+  // Start serial connection
   Serial.begin(250000);
 
   // Wait for input from user
@@ -114,8 +115,9 @@ void setup() {
 void loop()
 {
   // Sample position every SAMPLE_PERIOD
-  if(millis() >= SAMPLE_PERIOD && !stopWriting)
+  if(millis() >= sampleRunTime && !isStopped)
   {
+    sampleRunTime = millis() + SAMPLE_PERIOD;
     S.t[0] = float(micros())/1000000.0;
     S.theta[0] = countsToRadians(encoderCount);
     S.theta_dot[0] = calculateVelocity(&S,S.t[0],S.theta[0]);
