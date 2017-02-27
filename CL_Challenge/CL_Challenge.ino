@@ -15,7 +15,7 @@ Details:
 #define DIR_PIN     8 //2
 #define PWM_PIN     9 //3
 #define TA_PIN      4 // pin to connect to TA arduino
-#define START_PIN   5 // place momentary switch to ground
+#define START_PIN  A5 // place momentary switch to ground
 
 // Encoder Definitions
 #define ENC_PIN_A   2 //18
@@ -31,12 +31,11 @@ Details:
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 5000 // (ms)
 
-// Delays
-#define SERIAL_WRITE_DELAY 10
-#define TA_DELAY    5000      // Wait for TA arduino
+// Delays and periods
+#define SERIAL_WRITE_PERIOD 100 // ms
+#define TA_DELAY    5000      // ms Wait for TA arduino
+#define SAMPLE_PERIOD 100 // ms
 
-// Controller info
-#define SAMPLE_TIME 100 // ms
 // Variable Declarations
 float setpoint;   // desired position
 float K_p = 0.5;  // proportional control const
@@ -66,7 +65,7 @@ typedef struct S_t
 S_t S;
 
 // Create controller
-//createPIDController(K_p, K_i, K_d, SAMPLE_TIME)
+//createPIDController(K_p, K_i, K_d, SAMPLE_PERIOD)
 
 ///////////
 // Setup //
@@ -76,8 +75,7 @@ void setup() {
   pinMode(SENSOR_PIN,INPUT);
   pinMode(ENC_PIN_A,INPUT);
   pinMode(ENC_PIN_B,INPUT);
-  pinMode(START_PIN,INPUT);
-
+  digitalWrite(START_PIN, INPUT_PULLUP);  // set pullup on analog pin 5
   pinMode(DIR_PIN,OUTPUT);
   pinMode(PWM_PIN,OUTPUT);
   pinMode(TA_PIN, OUTPUT);
@@ -88,11 +86,11 @@ void setup() {
 
   // Wait for input from user
   Serial.println("Press start button");
-  while (isStopped==1)
-    {
-      isStopped = digitalRead(START_PIN);
-      delay(10);
-    }
+  while (isStopped)
+  {
+    isStopped = digitalRead(START_PIN);
+    delay(10);
+  }
 
   // Tell the TAs that we're ready...
   digitalWrite(TA_PIN,LOW);
@@ -114,8 +112,8 @@ void setup() {
 //////////
 void loop()
 {
-  // Sample position every SAMPLE_TIME
-  if(millis() >= SAMPLE_TIME && !stopWriting)
+  // Sample position every SAMPLE_PERIOD
+  if(millis() >= SAMPLE_PERIOD && !stopWriting)
   {
     S.t[0] = float(micros())/1000000.0;
     S.theta[0] = countsToRadians(encoderCount);
@@ -140,10 +138,10 @@ void loop()
     }
   }
 */
-  // Take a lot of readings
+  // Print at defined intervals
   if(millis() >= serialWriteRunTime && !stopWriting)
   {
-    serialWriteRunTime = millis() + SERIAL_WRITE_DELAY;
+    serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
 
     // Write to serial port
     Serial.print(millis()-TA_DELAY-beginTime);
