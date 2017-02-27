@@ -3,12 +3,12 @@ Closed Loop Challenge
 By Daniel Heideman and Stuart Sonatina
 MAE 156A - 2017-03-02
 Details:
-  1. Raise mass from bottom to 170-180 degrees.
-  2. Swing mass around 360 to strike pendulum
-  3. Follow-through and come to rest at 0 degrees (bottom) again
+  1. Raise mass from bottom to -175 degrees.
+  2. Swing mass around +355 degrees to strike pendulum (at +180 degrees).
+  3. Follow-through and come to rest at 360 degrees (bottom) again
 
 */
-//#include <DiscreteFilter.h>
+#include <DiscreteFilter.h>
 
 // Pin Definitions
 #define SENSOR_PIN  0 // What is this?
@@ -27,35 +27,32 @@ Details:
 #define THETA_STOP  315    // degrees
 #define THETA_BUFF  45     // degrees
 
-// TA Delay
-#define TA_DELAY    5000
-
-// Start Delay
-#define START_DELAY 10
-
-// Write Cutoff Time (ms)
-#define CUTOFF_TIME 1000
+// Stop motor after a period of time (in case of mishaps)
+#define CUTOFF_TIME 5000 // (ms)
 
 // Delays
 #define SERIAL_WRITE_DELAY 10
+#define TA_DELAY    5000      // Wait for TA arduino
 
 // Variable Declarations
-long encodercount = 0;
-
+long encoderCount = 0;
+unsigned long beginTime = 0;
 int motorSpeed  = 100;   // Percent
 int isStopped   = 1;
 int stopWriting = 0;
 
 // Runtime (timer) Variables
-unsigned long SerialWriteRuntime = 0;
+unsigned long serialWriteRunTime = 0;
 
-// Velocity struct
+// Define velocity struct type
 typedef struct velstruct_t
 {
   float x[2]; // radians
   float t[2]; // seconds
   float v[2]; // rad/s
-};
+} velstruct_t;
+
+// Create velocity structure
 velstruct_t velstruct;
 
 ///////////
@@ -66,6 +63,7 @@ void setup() {
   pinMode(SENSOR_PIN,INPUT);
   pinMode(ENC_PIN_A,INPUT);
   pinMode(ENC_PIN_B,INPUT);
+  pinMode(START_PIN,INPUT);
 
   pinMode(DIR_PIN,OUTPUT);
   pinMode(PWM_PIN,OUTPUT);
@@ -76,7 +74,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
   // Wait for input from user
-  Serial.Println("Press start button");
+  Serial.println("Press start button");
   while (isStopped==1)
     {
       isStopped = digitalRead(START_PIN);
@@ -89,10 +87,10 @@ void setup() {
   digitalWrite(TA_PIN,HIGH);
 
   // Reset encoder value
-  encodercount = 0;
+  encoderCount = 0;
 
-  // Start motor
-  setMotor(motorSpeed);
+  // Set zero time
+  beginTime = millis();
 
   // Start serial connection
   Serial.begin(250000);
@@ -104,19 +102,19 @@ void setup() {
 void loop()
  {
   // Take a lot of readings
-  if(millis() >= SerialWriteRuntime && !stopWriting)
+  if(millis() >= serialWriteRunTime && !stopWriting)
   {
-    SerialWriteRuntime = millis() + SERIAL_WRITE_DELAY;
+    serialWriteRunTime = millis() + SERIAL_WRITE_DELAY;
 
     // Calculate velocity
     float t = float(micros())/1000000.0;
-    float x = countsToRadians(encodercount);
+    float x = countsToRadians(encoderCount);
     float v = calculateVelocity(&velstruct,t,x);
 
     // Write to serial port
-    Serial.print(millis()-TA_DELAY);
+    Serial.print(millis()-TA_DELAY-beginTime);
     Serial.print(",");
-    Serial.print(encodercount);
+    Serial.print(encoderCount);
     Serial.print(",");
     Serial.println(velstruct.v[0]);
     return;
@@ -124,16 +122,16 @@ void loop()
 
   // Only run/compile cutoff bit if the stop angle is greater than 0
   #if (THETA_STOP > 0)
-  // Stop time
-  if(countsToDegrees(encodercount)/GEAR_RATIO >= THETA_STOP && !stopWriting)
+  // Stop time (time at 358.5 degrees and velocity <= 10 deg/s)
+  if(countsToDegrees(encoderCount)/GEAR_RATIO >= THETA_STOP && velstruct.v[0]*180.0/PI <= 10 && !stopWriting)
   {
     stopWriting = 1;
     Serial.print("Time to Hit: ~");
-    Serial.print(millis()-TA_DELAY-START_DELAY);
+    Serial.print(millis()-TA_DELAY-beginTime);
     Serial.print(" ms\n");
   }
 
-  if(countsToDegrees(encodercount)/GEAR_RATIO >= (THETA_STOP + THETA_BUFF) && isStopped == 0)
+  if(countsToDegrees(encoderCount)/GEAR_RATIO >= (THETA_STOP + THETA_BUFF) && isStopped == 0)
   {
     stopMotor();
   }
@@ -143,7 +141,7 @@ void loop()
   // Only run/compile cutoff bit if the cutoff time is greater than 0
   #if (CUTOFF_TIME > 0)
   // Stop time
-  if(millis() >= CUTOFF_TIME+TA_DELAY+START_DELAY && isStopped == 0)
+  if(millis() >= CUTOFF_TIME+TA_DELAY+beginTime && isStopped == 0)
   {
     stopMotor();
   }
@@ -165,7 +163,7 @@ void handleEncoderA()
   int encA = digitalRead(ENC_PIN_A);
   int encB = digitalRead(ENC_PIN_B);
 
-  encodercount += 2*(encA ^ encB) - 1;
+  encoderCount += 2*(encA ^ encB) - 1;
 }
 
 /*******************************************************************************
@@ -179,7 +177,7 @@ void handleEncoderB()
   int encA = digitalRead(ENC_PIN_A);
   int encB = digitalRead(ENC_PIN_B);
 
-  encodercount -= 2*(encA ^ encB) - 1;
+  encoderCount -= 2*(encA ^ encB) - 1;
 }
 
 /*******************************************************************************
