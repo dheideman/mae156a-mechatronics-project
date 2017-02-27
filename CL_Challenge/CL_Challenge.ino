@@ -1,18 +1,28 @@
 /*
 Closed Loop Challenge
+By Daniel Heideman and Stuart Sonatina
 MAE 156A - 2017-03-02
+Details:
+  1. Raise mass from bottom to 170-180 degrees.
+  2. Swing mass around 360 to strike pendulum
+  3. Follow-through and come to rest at 0 degrees (bottom) again
 
 */
 //#include <DiscreteFilter.h>
 
 // Pin Definitions
-#define SENSOR_PIN  0
+#define SENSOR_PIN  0 // What is this?
 #define DIR_PIN     8 //2
 #define PWM_PIN     9 //3
 #define TA_PIN      4 // pin to connect to TA arduino
 
+// Encoder Definitions
+#define ENC_PIN_A   2 //18
+#define ENC_PIN_B   3 //19
+#define CPR      48.0  // counts per revolution:
+
 // Gear Ratio and Stop Angle
-#define GEAR_RATIO  11.95
+#define GEAR_RATIO  4
 #define THETA_STOP  315    // degrees
 #define THETA_BUFF  45     // degrees
 
@@ -21,11 +31,6 @@ MAE 156A - 2017-03-02
 
 // Start Delay
 #define START_DELAY 10
-
-// Encoder Definitions
-#define ENC_PIN_A   2 //18
-#define ENC_PIN_B   3 //19
-#define CPR      48.0  // counts per revolution:
 
 // Write Cutoff Time (ms)
 #define CUTOFF_TIME 1000
