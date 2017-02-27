@@ -23,10 +23,10 @@ Details:
 #define CPR      48.0  // counts per revolution:
 
 // Gear Ratio and Stop Angle
-#define GEAR_RATIO  4
-#define THETA_TOP   -175  // degrees
-#define THETA_IMPACT 180  // degrees
-#define THETA_STOP  360   // degrees
+#define GEAR_RATIO      4.0
+#define THETA_TOP    -175.0   // degrees
+#define THETA_IMPACT  180.0   // degrees
+#define THETA_STOP    360.0   // degrees
 
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 5000 // (ms)
@@ -36,9 +36,13 @@ Details:
 #define TA_DELAY    5000      // Wait for TA arduino
 
 // Variable Declarations
-long encoderCount = 0;
-unsigned long beginTime = 0;
-int motorSpeed  = 0;  // Percent
+float K_p = 0.5;  // proportional control const
+float K_i = 0;    // integral control const
+float K_d = 0;    // derivative control const
+
+long encoderCount = 0;        // Current encoder position
+unsigned long beginTime = 0;  // Time when loop() starts
+int motorSpeed  = 0;          // Percent
 int isStopped   = 1;
 int stopWriting = 0;
 
@@ -55,6 +59,9 @@ typedef struct velstruct_t
 
 // Create velocity structure
 velstruct_t velstruct;
+
+// Create controller
+//createPIDController(K_p, K_i, K_d, SAMPLE_TIME)
 
 ///////////
 // Setup //
@@ -125,17 +132,17 @@ void loop()
     return;
   }
 
-  // Only run/compile cutoff bit if the stop angle is greater than 0
-  #if (THETA_STOP > 0)
-  // Stop time (time at 358.5 degrees and velocity <= 10 deg/s)
-  if(countsToDegrees(encoderCount)/GEAR_RATIO >= THETA_STOP && velstruct.v[0]*180.0/PI <= 10 && !stopWriting)
+  // Stop time (time at 360 +/- 1.5 degrees and velocity <= 10 deg/s)
+  if(theta >= THETA_STOP-1.5 &&
+    velstruct.v[0]*180.0/PI <= 10 &&
+
+    !stopWriting)
   {
     stopWriting = 1;
     Serial.print("Time to Hit: ~");
     Serial.print(millis()-TA_DELAY-beginTime);
     Serial.print(" ms\n");
   }
-  #endif
 
   // Only run/compile cutoff bit if the cutoff time is greater than 0
   #if (CUTOFF_TIME > 0)
@@ -150,6 +157,26 @@ void loop()
 //////////////////////////////
 // Custom defined functions //
 //////////////////////////////
+
+/*******************************************************************************
+* float rad2deg(float radians)
+*
+* Exactly what you think it does
+*******************************************************************************/
+float rad2deg(float radians)
+{
+  return radians * 180.0/PI;
+}
+
+/*******************************************************************************
+* float deg2rad(float degrees)
+*
+* Exactly what you think it does
+*******************************************************************************/
+float deg2rad(float degrees)
+{
+  return degrees * PI/180.0;
+}
 
 /*******************************************************************************
 * void handleEncoderA()
