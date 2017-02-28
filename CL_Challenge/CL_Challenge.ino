@@ -36,11 +36,11 @@ Details:
 #define SAMPLE_PERIOD       100   // ms
 
 // Variable Declarations
-float setpoint = 180;// desired position
-float error = 0;  // position error
-float K_p = 0.75;  // proportional control const
-float K_i = 0;    // integral control const
-float K_d = 0;    // derivative control const
+float setpoint = 0; // desired position
+float error = 0;    // position error
+float K_p = 0.75;   // proportional control const
+float K_i = 0;      // integral control const
+float K_d = 0;      // derivative control const
 
 long encoderCount = 0;        // Current encoder position
 unsigned long beginTime = 0;  // Time when loop() starts
@@ -107,6 +107,9 @@ void setup() {
   delay(TA_DELAY);
   digitalWrite(TA_PIN,HIGH);
 
+  // First state: get to -175 degrees
+  S.state = 1;
+
   // Reset encoder value
   encoderCount = 0;
 
@@ -119,69 +122,78 @@ void setup() {
 //////////
 void loop()
 {
-  // Sample position every SAMPLE_PERIOD
-  if(millis() >= sampleRunTime && !isStopped)
+  while(!isStopped)
   {
-    sampleRunTime = millis() + SAMPLE_PERIOD;
-    S.t[0] = float(micros())/1000000.0;
-    S.theta[0] = countsToRadians(encoderCount);
-    S.theta_dot[0] = calculateVelocity(&S,S.t[0],S.theta[0]);
-  }
-
-  // Get error, use PID controller to set motor output
-  error = setpoint - S.theta[0];
-  S.u[0] = PID.step(error);
-  setMotor(S.u[0]);
-  /*switch(stage) // Still need to define stage
-  {
-    case 1: // 1. Raise mass from bottom to top (-175 degrees).
+    // Sample position every SAMPLE_PERIOD
+    if(millis() >= sampleRunTime)
     {
-      setpoint = -175;
-      break;
+      sampleRunTime = millis() + SAMPLE_PERIOD;
+      S.t[0] = float(micros())/1000000.0;
+      S.theta[0] = countsToRadians(encoderCount);
+      S.theta_dot[0] = calculateVelocity(&S,S.t[0],S.theta[0]);
     }
-    case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
+
+    // Get difference of position and setpoint
+    error = setpoint - S.theta[0];
+
+    // Use PID controller to set motor output
+    S.u[0] = PID.step(error);
+    setMotor(S.u[0]);
+
+    // Depending on state, perform action
+    switch(S.state)
     {
-      while(S.theta[0] <= deg2rad(180)) {setMotor(100);}
-      break;
+      case 1: // 1. Raise mass from bottom to top (-175 degrees).
+      {
+        if (setpoint != -175){setpoint = -175;}
+        //else if(setpoint==-175 && )
+        break;
+      }
+      case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
+      {
+        while(S.theta[0] <= deg2rad(180)) {setMotor(100);}
+        break;
+      }
+      case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
+      {
+        setpoint = 0;
+        break;
+      }
     }
-    case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
+
+    // Print at defined intervals
+    if(millis() >= serialWriteRunTime && !stopWriting)
     {
-      setpoint = 0;
-      break;
+      serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
+
+      // Write to serial port
+      Serial.print(error);
+      Serial.print(",\t");
+      Serial.print(encoderCount);
+      Serial.print(",\t");
+      Serial.println(S.u[0]);
+      return;
     }
-  }
-*/
-  // Print at defined intervals
-  if(millis() >= serialWriteRunTime && !stopWriting)
-  {
-    serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
 
-    // Write to serial port
-    Serial.print(millis()-TA_DELAY-beginTime);
-    Serial.print(",");
-    Serial.print(encoderCount);
-    Serial.print(",");
-    Serial.println(S.theta_dot[0]);
-    return;
-  }
+    // Stop time (time at THETA_STOP +/- 1.5 degrees and velocity <= 10 deg/s)
+    if(S.theta[0] >= THETA_STOP - 1.5 &&
+      S.theta[0] <= THETA_STOP + 1.5 &&
+      S.theta_dot[0] <= deg2rad(10))
+    {
+      isStopped = 1;
+      Serial.print("Total elapsed time: ~");
+      Serial.print(millis()-TA_DELAY-beginTime);
+      Serial.print(" ms\n");
+    }
 
-  // Stop time (time at THETA_STOP +/- 1.5 degrees and velocity <= 10 deg/s)
-  if(S.theta[0] >= THETA_STOP - 1.5 &&
-    S.theta[0] <= THETA_STOP + 1.5 &&
-    S.theta_dot[0] <= deg2rad(10) &&
-    !stopWriting)
-  {
-    stopWriting = 1;
-    Serial.print("Total elapsed time: ~");
-    Serial.print(millis()-TA_DELAY-beginTime);
-    Serial.print(" ms\n");
+    // Stop motor if time has gone too long
+    if(millis()>=CUTOFF_TIME+TA_DELAY+beginTime){stopMotor();}
   }
 
-  // Stop motor if time has gone too long
-  if(millis() >= CUTOFF_TIME+TA_DELAY+beginTime && isStopped == 0)
-  {
-    stopMotor();
-  }
+  // Stop motor if isStopped is triggered.
+  stopMotor();
+  Serial.println("Motor Stopped");
+  delay(5000);
 }
 
 //////////////////////////////
