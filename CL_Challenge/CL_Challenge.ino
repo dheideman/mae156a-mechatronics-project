@@ -20,10 +20,9 @@ Details:
 // Encoder Definitions
 #define ENC_PIN_A   2 //18
 #define ENC_PIN_B   3 //19
-#define CPR      48.0 // counts per revolution:
+#define CPR     192.0 // 48.0 * 4 counts per revolution
 
-// Gear Ratio and transition angles
-#define GEAR_RATIO      4.0
+// Transition angles
 #define THETA_TOP    -175.0   // degrees
 #define THETA_IMPACT  180.0   // degrees
 #define THETA_STOP    360.0   // degrees
@@ -33,12 +32,13 @@ Details:
 
 // Delays and periods
 #define SERIAL_WRITE_PERIOD 100   // ms
-#define TA_DELAY            5000  // ms Wait for TA arduino
+#define TA_DELAY            2000  // ms Wait for TA arduino
 #define SAMPLE_PERIOD       100   // ms
 
 // Variable Declarations
-float setpoint;   // desired position
-float K_p = 0.5;  // proportional control const
+float setpoint = 180;// desired position
+float error = 0;  // position error
+float K_p = 0.75;  // proportional control const
 float K_i = 0;    // integral control const
 float K_d = 0;    // derivative control const
 
@@ -59,14 +59,14 @@ typedef struct S_t
   float theta_dot[2]; // rad/s
   float t[2];         // seconds
   float u[2];         // output to motor
-
+  int   state;        // state of wheel
 } S_t;
 
 // Create state structure
 S_t S;
 
 // Create controller
-//createPIDController(K_p, K_i, K_d, SAMPLE_PERIOD)
+DiscreteFilter PID;
 
 ///////////
 // Setup //
@@ -86,6 +86,11 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
+  // Create PID controller
+  PID.createPIDController(K_p, K_i, K_d, SAMPLE_PERIOD);
+  PID.setSaturation(100);
+  PID.clear();
+
   // Start serial connection
   Serial.begin(250000);
 
@@ -97,7 +102,7 @@ void setup() {
     delay(10);
   }
 
-  // Tell the TAs that we're ready...
+  Serial.println("Tell the TAs that we're ready...");
   digitalWrite(TA_PIN,LOW);
   delay(TA_DELAY);
   digitalWrite(TA_PIN,HIGH);
@@ -122,6 +127,11 @@ void loop()
     S.theta[0] = countsToRadians(encoderCount);
     S.theta_dot[0] = calculateVelocity(&S,S.t[0],S.theta[0]);
   }
+
+  // Get error, use PID controller to set motor output
+  error = setpoint - S.theta[0];
+  S.u[0] = PID.step(error);
+  setMotor(S.u[0]);
   /*switch(stage) // Still need to define stage
   {
     case 1: // 1. Raise mass from bottom to top (-175 degrees).
@@ -155,26 +165,23 @@ void loop()
     return;
   }
 
-  // Stop time (time at 360 +/- 1.5 degrees and velocity <= 10 deg/s)
+  // Stop time (time at THETA_STOP +/- 1.5 degrees and velocity <= 10 deg/s)
   if(S.theta[0] >= THETA_STOP - 1.5 &&
     S.theta[0] <= THETA_STOP + 1.5 &&
     S.theta_dot[0] <= deg2rad(10) &&
     !stopWriting)
   {
     stopWriting = 1;
-    Serial.print("Time to Hit: ~");
+    Serial.print("Total elapsed time: ~");
     Serial.print(millis()-TA_DELAY-beginTime);
     Serial.print(" ms\n");
   }
 
-  // Only run/compile cutoff bit if the cutoff time is greater than 0
-  #if (CUTOFF_TIME > 0)
   // Stop motor if time has gone too long
   if(millis() >= CUTOFF_TIME+TA_DELAY+beginTime && isStopped == 0)
   {
     stopMotor();
   }
-  #endif
 }
 
 //////////////////////////////
