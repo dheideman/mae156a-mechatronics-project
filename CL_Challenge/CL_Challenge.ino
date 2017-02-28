@@ -28,17 +28,17 @@ Details:
 #define THETA_STOP    360.0   // degrees
 
 // Stop motor after a period of time (in case of mishaps)
-#define CUTOFF_TIME 5000 // (ms)
+#define CUTOFF_TIME 10000 // (ms)
 
 // Delays and periods
-#define SERIAL_WRITE_PERIOD 100   // ms
+#define SERIAL_WRITE_PERIOD 200   // ms
 #define TA_DELAY            2000  // ms Wait for TA arduino
-#define SAMPLE_PERIOD       100   // ms
+#define SAMPLE_PERIOD       10   // ms
 
 // Variable Declarations
 float setpoint = 0; // desired position
 float error = 0;    // position error
-float K_p = 0.75;   // proportional control const
+float K_p = 35;     // proportional control const
 float K_i = 0;      // integral control const
 float K_d = 0;      // derivative control const
 
@@ -87,9 +87,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
   // Create PID controller
-  PID.createPIDController(K_p, K_i, K_d, SAMPLE_PERIOD);
+  PID.createPIDController(K_p, K_i, K_d, SAMPLE_PERIOD/1000.0);
   PID.setSaturation(100);
-  PID.clear();
 
   // Start serial connection
   Serial.begin(250000);
@@ -145,13 +144,18 @@ void loop()
     {
       case 1: // 1. Raise mass from bottom to top (-175 degrees).
       {
-        if (setpoint != -175){setpoint = -175;}
-        //else if(setpoint==-175 && )
+        if (setpoint != deg2rad(-175)){setpoint = deg2rad(-175);}
+        else if(setpoint==-175 && error <= deg2rad(5))
+        {
+          delay(800);
+          S.state = 2;
+        }
         break;
       }
       case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
       {
-        while(S.theta[0] <= deg2rad(180)) {setMotor(100);}
+        if(S.theta[0] <= deg2rad(180)) {setMotor(100);}
+        else {S.theta[0] = 3;}
         break;
       }
       case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
@@ -167,9 +171,10 @@ void loop()
       serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
 
       // Write to serial port
-      Serial.print(error);
+      Serial.print("\t");
+      Serial.print(rad2deg(S.theta[0]));
       Serial.print(",\t");
-      Serial.print(encoderCount);
+      Serial.print(rad2deg(error));
       Serial.print(",\t");
       Serial.println(S.u[0]);
       return;
