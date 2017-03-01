@@ -38,11 +38,12 @@ Code for testing basic controller
 // Variable Declarations
 float setpoint = 0; // desired position
 float error[2] = {0,0};    // position error
+float errorInt = 0;       // error integral
 float de = 0;
 float dt = 0;
-float K_p = 600;     // proportional control const
+float K_p = 400;     // proportional control const
 float K_i = 0;      // integral control const
-float K_d = 0;      // derivative control const
+float K_d = 10;      // derivative control const
 
 long encoderCount = 0;        // Current encoder position
 unsigned long beginTime = 0;  // Time when loop() starts
@@ -124,13 +125,14 @@ void loop()
       S.theta[0]      = countsToRadians(encoderCount);
       //S.theta_dot[0] = (S.theta[0] - S.theta[1])/S.t[0] - S.t[1];
 
-      // Get difference of position and setpoint
+      // update errors
       error[1] = error[0];
       error[0] = setpoint - S.theta[0];
       de = error[0]-error[1];
+      errorInt += error[0]*dt;
 
       // Controller
-      S.u[0] = K_p*error[0];// + K_d*de/dt;
+      S.u[0] = K_p*error[0] + K_d*de/dt + K_i*errorInt;
       S.u[1] = setMotor(S.u[0]);
     }
 
@@ -145,9 +147,9 @@ void loop()
       Serial.print(",\t");
       Serial.print(rad2deg(error[0]));
       Serial.print(",\t");
-      Serial.print(S.u[0]);
-      Serial.print(",\t");
-      Serial.println(dt);
+      Serial.println(S.u[0]);
+      //Serial.print(",\t");
+      //Serial.println(dt);
       return;
     }
 
