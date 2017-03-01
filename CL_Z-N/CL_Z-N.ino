@@ -8,12 +8,11 @@ Details:
   3. Follow-through and come to rest at bottom again (360 degrees)
 
 */
-#include <DiscreteFilter.h>
 
 // Pin Definitions
-#define SENSOR_PIN  0 // What is this?
-#define DIR_PIN     8 //2
-#define PWM_PIN     9 //3
+#define SENSOR_PIN  0
+#define DIR_PIN     8 //
+#define PWM_PIN     9 //
 #define TA_PIN      4 // pin to connect to TA arduino
 #define START_PIN  A5 // place momentary switch to ground
 
@@ -32,13 +31,12 @@ Details:
 
 // Delays and periods
 #define SERIAL_WRITE_PERIOD 100   // ms
-#define TA_DELAY            2000  // ms Wait for TA arduino
 #define SAMPLE_PERIOD       10   // ms
 
 // Variable Declarations
 float setpoint = 0; // desired position
 float error[2] = {0,0};    // position error
-float K_p = 35;     // proportional control const
+float K_p = 800;     // proportional control const
 float K_i = 0;      // integral control const
 float K_d = 0;      // derivative control const
 
@@ -65,9 +63,6 @@ typedef struct S_t
 // Create state structure
 S_t S;
 
-// Create controller
-DiscreteFilter PID;
-
 ///////////
 // Setup //
 ///////////
@@ -85,10 +80,6 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
 
-  // Create PID controller
-  PID.createPIDController(K_p, K_i, K_d, SAMPLE_PERIOD/1000.0);
-  PID.setSaturation(100);
-
   // Start serial connection
   Serial.begin(250000);
 
@@ -99,14 +90,6 @@ void setup() {
     isStopped = digitalRead(START_PIN);
     delay(10);
   }
-
-  Serial.println("Tell the TAs that we're ready...");
-  digitalWrite(TA_PIN,LOW);
-  delay(TA_DELAY);
-  digitalWrite(TA_PIN,HIGH);
-
-  // First state: get to -175 degrees
-  S.state = 1;
 
   // Reset encoder value
   encoderCount = 0;
@@ -120,6 +103,7 @@ void setup() {
 //////////
 void loop()
 {
+  setpoint = deg2rad(180);
   while(!isStopped)
   {
     // Sample position every SAMPLE_PERIOD
@@ -138,43 +122,7 @@ void loop()
 
       // Controller
       S.u[0] = K_p*error[0] + K_d*(error[0]-error[1]);
-      setMotor(S.u[0]);
-
-      //S.theta_dot[0]  = calculateVelocity(&S,S.t[0],S.theta[0]);
-    }
-
-    // Use PID controller to set motor output
-    //S.u[0] = PID.step(error);
-
-    // Depending on state, perform action
-    switch(S.state)
-    {
-      case 1: // 1. Raise mass from bottom to top (-175 degrees).
-      {
-        if (setpoint != THETA_TOP){setpoint = THETA_TOP;}
-        else if(setpoint==THETA_TOP && error[0] <= deg2rad(5))
-        {
-          Serial.println("THETA_TOP reached");
-          delay(800);
-          S.state = 2;
-        }
-        break;
-      }
-      case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
-      {
-        if(S.theta[0] <= THETA_IMPACT) {setMotor(100);}
-        else
-        {
-          Serial.println("Impact");
-          S.state = 3;
-        }
-        break;
-      }
-      case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
-      {
-        setpoint = THETA_STOP;
-        break;
-      }
+      S.u[1] = setMotor(S.u[0]);
     }
 
     // Print at defined intervals
@@ -190,17 +138,6 @@ void loop()
       Serial.print(",\t");
       Serial.println(S.u[0]);
       return;
-    }
-
-    // Stop time (time at THETA_STOP +/- 1.5 degrees and velocity <= 10 deg/s)
-    if(S.theta[0] >= THETA_STOP - 1.5 &&
-      S.theta[0] <= THETA_STOP + 1.5 &&
-      S.theta_dot[0] <= deg2rad(10))
-    {
-      isStopped = 1;
-      Serial.print("Theta reached. Total Time: ~");
-      Serial.print(millis()-beginTime);
-      Serial.print(" ms\n");
     }
 
     // Stop motor if time has gone too long
@@ -325,26 +262,4 @@ float setMotor(float motorSpeed)
 
   // Return the actual controller output with saturation protection
   return motorSpeed;
-}
-
-/*******************************************************************************
-* float calculateVelocity(S_t* S, float t, float x)
-*
-* Calculate the velocity for a S_t struct
-* It's best to use time in seconds
-*******************************************************************************/
-float calculateVelocity(S_t* S, float t, float theta)
-{
-  // Update values
-  S->theta_dot[1] = S->theta_dot[0];
-  S->theta[1]     = S->theta[0];
-  S->theta[0]     = theta;
-  S->t[1]         = S->t[0];
-  S->t[0]         = t;
-
-  float d_theta = S->theta[0] - S->theta[1];
-  float dt      = S->t[0] - S->t[1];
-
-  S->theta_dot[0] = d_theta/dt;
-  return S->theta_dot[0];
 }
