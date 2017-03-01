@@ -7,11 +7,21 @@ Code for testing basic controller
 */
 
 // Pin Definitions
-#define SENSOR_PIN  0
+#define POT_PIN     0
 #define DIR_PIN     8 //
 #define PWM_PIN     9 //
 #define TA_PIN      4 // pin to connect to TA arduino
 #define START_PIN  A5 // place momentary switch to ground
+
+// Potentiometer Definitions
+#define POT_MIN     0
+#define POT_MAX     340 // max angle readable by pot (degrees)
+#define POT_OFFSET  0   // offset of mass down position from 0 (degrees)
+
+// Pot Buffer Zone
+#define POT_BUFFER    5               // buffer zone size around dead zone (degrees)
+#define POT_BUFF_POS  POT_MAX - POT_BUFFER    // Effective boundary of pot angles (+)
+#define POT_BUFF_NEG  POT_BUFFER              // Effective boundary of pot angles (-)
 
 // Encoder Definitions
 #define ENC_PIN_A   2 //
@@ -205,6 +215,17 @@ void handleEncoderB()
   int encB = digitalRead(ENC_PIN_B);
 
   encoderCount -= 2*(encA ^ encB) - 1;
+}
+
+/*******************************************************************************
+* float readPotRadians(int pin)
+*
+* Read pot angle in radians
+*******************************************************************************/
+float readPotRadians(int pin)
+{
+  // Standard read
+  return deg2rad(map(constrain(analogRead(pin),0,1023),0,1023,POT_MIN,POT_MAX));
 }
 
 /*******************************************************************************
