@@ -127,17 +127,24 @@ void loop()
     if(millis() >= sampleRunTime)
     {
       sampleRunTime = millis() + SAMPLE_PERIOD;
-      S.t[0] = float(micros())/1000000.0;
-      S.theta[0] = countsToRadians(encoderCount);
-      S.theta_dot[0] = calculateVelocity(&S,S.t[0],S.theta[0]);
+      S.t[1]          = S.t[0];
+      S.t[0]          = float(micros())/1000000.0;
+      S.theta[1]      = S.theta[0];
+      S.theta[0]      = countsToRadians(encoderCount);
+      S.theta_dot[0] = (S.theta[0] - S.theta[1])/S.t[0] - S.t[1];
+
+      // Get difference of position and setpoint
+      error = setpoint - S.theta[0];
+
+      // Controller
+      S.u[0] = K_p*error;
+      setMotor(S.u[0]);
+
+      //S.theta_dot[0]  = calculateVelocity(&S,S.t[0],S.theta[0]);
     }
 
-    // Get difference of position and setpoint
-    error = setpoint - S.theta[0];
-
     // Use PID controller to set motor output
-    S.u[0] = PID.step(error);
-    setMotor(S.u[0]);
+    //S.u[0] = PID.step(error);
 
     // Depending on state, perform action
     switch(S.state)
