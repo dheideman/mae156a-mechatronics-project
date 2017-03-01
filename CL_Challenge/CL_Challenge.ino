@@ -162,7 +162,7 @@ void loop()
       case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
       {
         if(S.theta[0] <= deg2rad(180)) {setMotor(100);}
-        else {S.theta[0] = 3;}
+        else {S.state = 3;}
         break;
       }
       case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
