@@ -2,11 +2,8 @@
 Closed Loop Challenge
 By Daniel Heideman and Stuart Sonatina
 MAE 156A - 2017-03-02
-Details:
-  1. Raise mass from bottom to top (-175 degrees).
-  2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
-  3. Follow-through and come to rest at bottom again (360 degrees)
 
+Code for testing basic controller
 */
 
 // Pin Definitions
@@ -17,26 +14,23 @@ Details:
 #define START_PIN  A5 // place momentary switch to ground
 
 // Encoder Definitions
-#define ENC_PIN_A   2 //18
-#define ENC_PIN_B   3 //19
+#define ENC_PIN_A   2 //
+#define ENC_PIN_B   3 //
 #define CPR     201.6 // 48.0 * 4.2 counts per revolution
 
-// Transition angles
-#define THETA_TOP    deg2rad(-175)// degrees
-#define THETA_IMPACT deg2rad(180) // degrees
-#define THETA_STOP   deg2rad(360) // degrees
-
 // Stop motor after a period of time (in case of mishaps)
-#define CUTOFF_TIME 10000 // (ms)
+#define CUTOFF_TIME 5000 // (ms)
 
 // Delays and periods
-#define SERIAL_WRITE_PERIOD 100   // ms
+#define SERIAL_WRITE_PERIOD 40   // ms
 #define SAMPLE_PERIOD       10   // ms
 
 // Variable Declarations
 float setpoint = 0; // desired position
 float error[2] = {0,0};    // position error
-float K_p = 800;     // proportional control const
+float de = 0;
+float dt = 0;
+float K_p = 600;     // proportional control const
 float K_i = 0;      // integral control const
 float K_d = 0;      // derivative control const
 
@@ -53,11 +47,10 @@ unsigned long sampleRunTime = 0;
 // Define state struct type
 typedef struct S_t
 {
-  float theta[2];     // radians
-  float theta_dot[2]; // rad/s
-  float t[2];         // seconds
-  float u[2];         // output to motor
-  int   state;        // state of wheel
+  float theta[2] = {0,0};     // radians
+  float theta_dot[2] = {0,0}; // rad/s
+  float t[2] = {0,0};         // seconds
+  float u[2] = {0,0};         // output to motor
 } S_t;
 
 // Create state structure
@@ -83,7 +76,10 @@ void setup() {
   // Start serial connection
   Serial.begin(250000);
 
+  S.t[0] = millis();
+
   // Wait for input from user
+  Serial.println();
   Serial.println("Press start button");
   while (isStopped)
   {
@@ -110,18 +106,21 @@ void loop()
     if(millis() >= sampleRunTime)
     {
       sampleRunTime = millis() + SAMPLE_PERIOD;
-      S.t[1]          = S.t[0];
-      S.t[0]          = float(micros())/1000000.0;
+      S.t[1]  = S.t[0];
+      S.t[0]  = float(micros())/1000000.0;
+      dt = S.t[0]-S.t[1];
+
       S.theta[1]      = S.theta[0];
       S.theta[0]      = countsToRadians(encoderCount);
-      S.theta_dot[0] = (S.theta[0] - S.theta[1])/S.t[0] - S.t[1];
+      //S.theta_dot[0] = (S.theta[0] - S.theta[1])/S.t[0] - S.t[1];
 
       // Get difference of position and setpoint
       error[1] = error[0];
       error[0] = setpoint - S.theta[0];
+      de = error[0]-error[1];
 
       // Controller
-      S.u[0] = K_p*error[0] + K_d*(error[0]-error[1]);
+      S.u[0] = K_p*error[0];// + K_d*de/dt;
       S.u[1] = setMotor(S.u[0]);
     }
 
@@ -136,7 +135,9 @@ void loop()
       Serial.print(",\t");
       Serial.print(rad2deg(error[0]));
       Serial.print(",\t");
-      Serial.println(S.u[0]);
+      Serial.print(S.u[0]);
+      Serial.print(",\t");
+      Serial.println(dt);
       return;
     }
 
