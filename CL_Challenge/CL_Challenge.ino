@@ -242,7 +242,7 @@ void loop()
     }
     case 7: // 7. Wait for controller to reach bottom (0 degrees)
     {
-      if(abs(PID.error[0]) <= deg2rad(2))
+      if(abs(PID.error[0]) <= deg2rad(1.5))
       {
         // You've reached the end!
         Serial.println("thetaStop reached");
@@ -255,7 +255,7 @@ void loop()
     case 8: // 8. Wait for controller to stabilize at bottom (0 degrees)
     {
       // Make sure we're hanging out at the bottom
-      if(abs(PID.error[0]) > deg2rad(2)) 
+      if(abs(PID.error[0]) > deg2rad(1.5)) 
       {
         // if not, go back to state 7
         S.state = 7;
