@@ -40,7 +40,7 @@ float setpoint = 0; // desired position
 float error[2] = {0,0};    // position error
 float de = 0;
 float dt = 0;
-float K_p = 600;     // proportional control const
+float K_p = 600;    // proportional control const
 float K_i = 0;      // integral control const
 float K_d = 0;      // derivative control const
 
@@ -71,7 +71,7 @@ S_t S;
 ///////////
 void setup() {
   // Initialize pins
-  pinMode(SENSOR_PIN,INPUT);
+  pinMode(POT_PIN,INPUT);
   pinMode(ENC_PIN_A,INPUT);
   pinMode(ENC_PIN_B,INPUT);
   pinMode(START_PIN, INPUT_PULLUP);

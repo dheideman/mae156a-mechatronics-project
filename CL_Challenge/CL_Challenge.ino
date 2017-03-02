@@ -11,9 +11,9 @@ Details:
 #include <DiscreteFilter.h>
 
 // Pin Definitions
-#define SENSOR_PIN  0 // What is this?
-#define DIR_PIN     8 //2
-#define PWM_PIN     9 //3
+#define POT_PIN     0
+#define DIR_PIN     8 //
+#define PWM_PIN     9 //
 #define TA_PIN      4 // pin to connect to TA arduino
 #define START_PIN  A5 // place momentary switch to ground
 
@@ -22,11 +22,6 @@ Details:
 #define ENC_PIN_B   3 //19
 #define CPR     201.6 // 48.0 * 4.2 counts per revolution
 
-// Transition angles
-#define THETA_TOP    deg2rad(-175)// degrees
-#define THETA_IMPACT deg2rad(180) // degrees
-#define THETA_STOP   deg2rad(360) // degrees
-
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 10000 // (ms)
 
@@ -34,6 +29,11 @@ Details:
 #define SERIAL_WRITE_PERIOD 100   // ms
 #define TA_DELAY            2000  // ms Wait for TA arduino
 #define SAMPLE_PERIOD       10   // ms
+
+// Transition angles
+float thetaTop;    // degrees
+float thetaImpact; // degrees
+float thetaStop;    // degrees
 
 // Variable Declarations
 float setpoint = 0; // desired position
@@ -72,8 +72,13 @@ DiscreteFilter PID;
 // Setup //
 ///////////
 void setup() {
+  // Transition angles
+  thetaTop    = deg2rad(-175);  // degrees
+  thetaImpact = deg2rad(180); // degrees
+  thetaStop   = deg2rad(360); // degrees
+
   // Initialize pins
-  pinMode(SENSOR_PIN,INPUT);
+  pinMode(POT_PIN,INPUT);
   pinMode(ENC_PIN_A,INPUT);
   pinMode(ENC_PIN_B,INPUT);
   pinMode(START_PIN, INPUT_PULLUP);
@@ -151,10 +156,10 @@ void loop()
     {
       case 1: // 1. Raise mass from bottom to top (-175 degrees).
       {
-        if (setpoint != THETA_TOP){setpoint = THETA_TOP;}
-        else if(setpoint==THETA_TOP && error[0] <= deg2rad(5))
+        if (setpoint != thetaTop){setpoint = thetaTop;}
+        else if(setpoint==thetaTop && error[0] <= deg2rad(5))
         {
-          Serial.println("THETA_TOP reached");
+          Serial.println("thetaTop reached");
           delay(800);
           S.state = 2;
         }
@@ -162,7 +167,7 @@ void loop()
       }
       case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
       {
-        if(S.theta[0] <= THETA_IMPACT) {setMotor(100);}
+        if(S.theta[0] <= thetaImpact) {setMotor(100);}
         else
         {
           Serial.println("Impact");
@@ -172,7 +177,7 @@ void loop()
       }
       case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
       {
-        setpoint = THETA_STOP;
+        setpoint = thetaStop;
         break;
       }
     }
@@ -192,9 +197,9 @@ void loop()
       return;
     }
 
-    // Stop time (time at THETA_STOP +/- 1.5 degrees and velocity <= 10 deg/s)
-    if(S.theta[0] >= THETA_STOP - 1.5 &&
-      S.theta[0] <= THETA_STOP + 1.5 &&
+    // Stop time (time at thetaStop +/- 1.5 degrees and velocity <= 10 deg/s)
+    if(S.theta[0] >= thetaStop - 1.5 &&
+      S.theta[0] <= thetaStop + 1.5 &&
       S.theta_dot[0] <= deg2rad(10))
     {
       isStopped = 1;
