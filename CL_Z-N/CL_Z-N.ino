@@ -123,7 +123,7 @@ void setup() {
   PID.kp = K_p;
   PID.ki = K_i;
   PID.kd = K_d;
-  PID.errorsat = 100/PID.ki;
+  PID.errorsat = 100/PID.kp;
 
   // Reset encoder value
   encoderCount = 0;
