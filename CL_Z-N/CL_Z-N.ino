@@ -14,14 +14,13 @@ Code for testing basic controller
 #define START_PIN  A5 // place momentary switch to ground
 
 // Potentiometer Definitions
-#define POT_MIN     0
-#define POT_MAX     340 // max angle readable by pot (degrees)
-#define POT_OFFSET  0   // offset of mass down position from 0 (degrees)
+#define DEG_PER_CNT -0.3636
+#define POT_OFFSET  144
 
-// Pot Buffer Zone
-#define POT_BUFFER    5               // buffer zone size around dead zone (degrees)
-#define POT_BUFF_POS  POT_MAX - POT_BUFFER    // Effective boundary of pot angles (+)
-#define POT_BUFF_NEG  POT_BUFFER              // Effective boundary of pot angles (-)
+//// Pot Buffer Zone
+//#define POT_BUFFER    5               // buffer zone size around dead zone (degrees)
+//#define POT_BUFF_POS  POT_MAX - POT_BUFFER    // Effective boundary of pot angles (+)
+//#define POT_BUFF_NEG  POT_BUFFER              // Effective boundary of pot angles (-)
 
 // Encoder Definitions
 #define ENC_PIN_A   2 //
@@ -85,6 +84,7 @@ void setup() {
 
   // Start serial connection
   Serial.begin(250000);
+  //Serial.println(rad2deg(readPotRadians(POT_PIN)));
 
   S.t[0] = millis();
 
@@ -94,6 +94,8 @@ void setup() {
   while (isStopped)
   {
     isStopped = digitalRead(START_PIN);
+    //Serial.println(analogRead(POT_PIN));
+    Serial.println(rad2deg(readPotRadians(POT_PIN)));  // measure pot angle count
     delay(10);
   }
 
@@ -109,7 +111,7 @@ void setup() {
 //////////
 void loop()
 {
-  setpoint = deg2rad(180);
+  setpoint = deg2rad(-180);
   while(!isStopped)
   {
     // Sample position every SAMPLE_PERIOD
@@ -121,7 +123,7 @@ void loop()
       dt = S.t[0]-S.t[1];
 
       S.theta[1]      = S.theta[0];
-      S.theta[0]      = countsToRadians(encoderCount);
+      S.theta[0]      = readPotRadians(POT_PIN);
       //S.theta_dot[0] = (S.theta[0] - S.theta[1])/S.t[0] - S.t[1];
 
       // Get difference of position and setpoint
@@ -225,8 +227,7 @@ void handleEncoderB()
 float readPotRadians(int pin)
 {
   // Standard read
-  float rawangle = map(constrain(analogRead(pin),0,1023),0,1023,POT_MIN,POT_MAX);
-  return deg2rad( rawangle - POT_OFFSET );
+  return deg2rad(DEG_PER_CNT*(analogRead(pin) - POT_OFFSET));
 }
 
 /*******************************************************************************
