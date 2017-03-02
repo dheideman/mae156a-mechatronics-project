@@ -8,6 +8,8 @@ Details:
   3. Follow-through and come to rest at bottom again (360 degrees)
 
 */
+// Serial write, or serial plot?
+#define serWrite 1
 
 // Pin Definitions
 #define POT_PIN     0
@@ -53,7 +55,6 @@ int posholdcount = 0;
 long encoderCount = 0;        // Current encoder position
 unsigned long beginTime = 0;  // Time when loop() starts
 int motorSpeed  = 0;          // Percent
-int serWrite = 0;
 
 // Runtime (timer) Variables
 unsigned long serialWriteRunTime = 0;
@@ -303,7 +304,6 @@ void loop()
     // Get difference of position and setpoint
     PID.error[1] = PID.error[0];
     PID.error[0] = PID.setpoint - S.theta[0];
-
     float de = PID.error[0] - PID.error[1];
 
     // Calculate integral gain
@@ -392,7 +392,6 @@ float readPotRadians(int pin)
 *******************************************************************************/
 void stopMotor()
 {
-  serWrite = 0;
   setMotor(0);
   PID.enabled = 0;
 }
