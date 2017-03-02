@@ -24,7 +24,7 @@ Details:
 #define CUTOFF_TIME 10000 // (ms)
 
 // Delays and periods
-#define SERIAL_WRITE_PERIOD 100   // ms
+#define SERIAL_WRITE_PERIOD 40   // ms
 #define TA_DELAY            2000  // ms Wait for TA arduino
 #define CONTROLLER_PERIOD   10    // ms
 #define POSITION_HOLD_TIME  1000  // ms
@@ -37,7 +37,7 @@ Details:
 // PID Constants: Stopping
 #define KP_STOP   230
 #define KI_STOP   2100
-#define KD_STOP   24
+#define KD_STOP   23
 
 // Variable Declarations
 
@@ -53,7 +53,7 @@ int posholdcount = 0;
 long encoderCount = 0;        // Current encoder position
 unsigned long beginTime = 0;  // Time when loop() starts
 int motorSpeed  = 0;          // Percent
-int stopWriting = 0;
+int serWrite = 0;
 
 // Runtime (timer) Variables
 unsigned long serialWriteRunTime = 0;
@@ -135,8 +135,8 @@ void loop()
       stopMotor();
 
       // Wait for input from user
-      Serial.println();
-      Serial.println("----- Press start button -----");
+      if(serWrite) Serial.println();
+      if(serWrite) Serial.println("----- Press start button -----");
       while (digitalRead(START_PIN)) delay(10);
 
 //        Serial.println("Tell the TAs that we're ready...");
@@ -146,7 +146,7 @@ void loop()
 
       // First state: get to -175 degrees
       S.state = 1;
-      Serial.println("Moving to State 1");
+      if(serWrite) Serial.println("Moving to State 1");
 
       // Reset encoder value
       encoderCount = 0;
@@ -169,7 +169,7 @@ void loop()
 
       // Initialization is done, so immediately go to state 2
       S.state = 2;
-      Serial.println("Moving to State 2");
+      if(serWrite) Serial.println("Moving to State 2");
       break;
     }
     case 2: // 2. Raise mass from bottom to top (-172 degrees).
@@ -178,8 +178,8 @@ void loop()
       {
         // You've reached the top!
         timeatpos = millis();
-        Serial.println("thetaTop reached");
-        Serial.println("Moving to State 3");
+        if(serWrite) Serial.println("thetaTop reached");
+        if(serWrite) Serial.println("Moving to State 3");
         S.state = 3;
       }
       break;
@@ -187,17 +187,17 @@ void loop()
     case 3: // 3. Wait at top for prescribed amount of time
     {
       // Make sure we're still at the top
-      if(abs(PID.error[0]) > deg2rad(2))
+      if(S.theta[0] <= -170 && S.theta[0] >= -180)
       {
         // if not, go back to state 2
         S.state = 2;
-        Serial.println("Moving back to State 2");
+        if(serWrite) Serial.println("Moving back to State 2");
       }
       // If we've been here long enough, then we can proceed.
-      else if( millis() - timeatpos > POSITION_HOLD_TIME-100 )
+      else if( millis() - timeatpos > POSITION_HOLD_TIME )
       {
         S.state = 4;
-        Serial.println("Moving to State 4");
+        if(serWrite) Serial.println("Moving to State 4");
       }
       break;
     }
@@ -212,16 +212,16 @@ void loop()
 
       // Prep work done - continue to next state
       S.state = 5;
-      Serial.println("Moving to State 5");
+      if(serWrite) Serial.println("Moving to State 5");
       break;
     }
     case 5: // 5. Wait for mass to strike pendulum at top (-180 degrees).
     {
       if(S.theta[0] <= thetaImpact)
       {
-        Serial.println("Impact");
+        if(serWrite) Serial.println("Impact");
         S.state = 6;
-        Serial.println("Moving to State 6");
+        if(serWrite) Serial.println("Moving to State 6");
       }
       break;
     }
@@ -229,7 +229,7 @@ void loop()
     {
       // Initialize PID controller for Stopping
       PID.kp = KP_STOP;
-      PID.ki = 0;
+      PID.ki = KI_STOP;
       PID.kd = KD_STOP;
       PID.errorsat = 100/PID.kp;
       PID.enabled = 1;
@@ -238,21 +238,18 @@ void loop()
 
       // Initialization is done, so immediately go to state 7
       S.state = 7;
-      Serial.println("Moving to State 7");
+      if(serWrite) Serial.println("Moving to State 7");
       break;
     }
     case 7: // 7. Wait for controller to reach bottom (0 degrees)
     {
       if(abs(PID.error[0]) <= deg2rad(1.5))
       {
-        // Implement integral control to eliminate steady state error
-        PID.ki = KI_STOP;
-
         // You've reached the end!
-        Serial.println("thetaStop reached");
+        if(serWrite) Serial.println("thetaStop reached");
         timeatpos = millis();
         S.state = 8;
-        Serial.println("Moving to State 8");
+        if(serWrite) Serial.println("Moving to State 8");
       }
       break;
     }
@@ -263,26 +260,28 @@ void loop()
       {
         // if not, go back to state 7
         S.state = 7;
-        Serial.println("Moving back to State 7");
+        if(serWrite) Serial.println("Moving back to State 7");
       }
       // If we've been here long enough, then we can proceed.
       else if( millis() - timeatpos > POSITION_HOLD_TIME )
       {
         // You've reached the end!
-        Serial.println("Stopping Motor");
+        if(serWrite) Serial.println("Stopping Motor");
         stopMotor();
+        if(serWrite) Serial.print("Execution time: ");
+        if(serWrite) Serial.print(timeatpos - beginTime);
+        if(serWrite) Serial.println(" ms");
+
+        // Restart
         S.state = 0;
-        Serial.print("Execution time: ");
-        Serial.print(timeatpos - beginTime);
-        Serial.println(" ms");
-        Serial.println("Moving to State 0");
+        if(serWrite) Serial.println("Moving to State 0");
       }
       break;
     }
     default:
     {
       S.state = 0;
-      Serial.println("Moving to State 0");
+      if(serWrite) Serial.println("Moving to State 0");
     }
   }
 
@@ -304,10 +303,11 @@ void loop()
     // Get difference of position and setpoint
     PID.error[1] = PID.error[0];
     PID.error[0] = PID.setpoint - S.theta[0];
+
     float de = PID.error[0] - PID.error[1];
 
     // Calculate integral gain
-    if (abs(PID.kp * PID.error[0]) >= 150) // Windup protection
+    if (abs(PID.kp * PID.error[0]) >= 110) // Windup protection
       PID.errorsum = 0;
     else if ( PID.errorsat > 0 )
       PID.errorsum = constrain(PID.errorsum + PID.error[0] * dt,
@@ -325,37 +325,27 @@ void loop()
   }
 
   // Print at defined intervals
-  if(millis() >= serialWriteRunTime && !stopWriting)
+  if(millis() >= serialWriteRunTime && !serWrite)
   {
     serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
 
     // Write to serial port
-    Serial.print("\t");
-    Serial.print(rad2deg(S.theta[0]));
+//    Serial.print("\t");
+//    Serial.print(rad2deg(S.theta[0]));
     Serial.print(",\t");
     Serial.print(rad2deg(PID.error[0]));
     Serial.print(",\t");
-    Serial.println(S.u[0]);
+    Serial.println(S.u[1]);
     return;
   }
-
-//  // Stop time (time at thetaStop +/- 1.5 degrees and velocity <= 10 deg/s)
-//  if(S.theta[0] >= thetaStop - 1.5 &&
-//    S.theta[0] <= thetaStop + 1.5 &&
-//    S.theta_dot[0] <= deg2rad(10))
-//  {
-//    Serial.print("Theta reached. Total Time: ~");
-//    Serial.print(millis()-beginTime);
-//    Serial.print(" ms\n");
-//  }
 
   // Stop motor if time has gone too long
   if(millis()>=CUTOFF_TIME+beginTime)
   {
-    Serial.println("CUTOFF_TIME reached");
+    if(serWrite) Serial.println("CUTOFF_TIME reached");
     stopMotor();
     S.state = 0;
-    Serial.println("Moving to State 0");
+    if(serWrite) Serial.println("Moving to State 0");
   }
 
 }
@@ -398,11 +388,11 @@ float readPotRadians(int pin)
 /*******************************************************************************
 * void stopMotor()
 *
-* Stop the motor, set flag "stopWriting"
+* Stop the motor, set flag "serWrite"
 *******************************************************************************/
 void stopMotor()
 {
-  stopWriting = 1;
+  serWrite = 0;
   setMotor(0);
   PID.enabled = 0;
 }
