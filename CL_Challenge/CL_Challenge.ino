@@ -35,9 +35,9 @@ Details:
 #define KD_LIFT   20
 
 // PID Constants: Stopping
-#define KP_STOP   300
-#define KI_STOP   2000
-#define KD_STOP   20
+#define KP_STOP   230
+#define KI_STOP   2100
+#define KD_STOP   24
 
 // Variable Declarations
 
@@ -194,7 +194,7 @@ void loop()
         Serial.println("Moving back to State 2");
       }
       // If we've been here long enough, then we can proceed.
-      else if( millis() - timeatpos > POSITION_HOLD_TIME )
+      else if( millis() - timeatpos > POSITION_HOLD_TIME-100 )
       {
         S.state = 4;
         Serial.println("Moving to State 4");
@@ -229,7 +229,7 @@ void loop()
     {
       // Initialize PID controller for Stopping
       PID.kp = KP_STOP;
-      PID.ki = KI_STOP;
+      PID.ki = 0;
       PID.kd = KD_STOP;
       PID.errorsat = 100/PID.kp;
       PID.enabled = 1;
@@ -245,6 +245,9 @@ void loop()
     {
       if(abs(PID.error[0]) <= deg2rad(1.5))
       {
+        // Implement integral control to eliminate steady state error
+        PID.ki = KI_STOP;
+
         // You've reached the end!
         Serial.println("thetaStop reached");
         timeatpos = millis();
