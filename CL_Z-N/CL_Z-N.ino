@@ -37,8 +37,6 @@ Code for testing basic controller
 // Variable Declarations
 float setpoint = 0; // desired position
 float error[2] = {0,0};    // position error
-float de = 0;
-float dt = 0;
 float K_p = 600;     // proportional control const
 float K_i = 0;      // integral control const
 float K_d = 0;      // derivative control const
@@ -120,7 +118,7 @@ void loop()
       sampleRunTime = millis() + SAMPLE_PERIOD;
       S.t[1]  = S.t[0];
       S.t[0]  = float(micros())/1000000.0;
-      dt = S.t[0]-S.t[1];
+      float dt = S.t[0]-S.t[1];
 
       S.theta[1]      = S.theta[0];
       S.theta[0]      = readPotRadians(POT_PIN);
@@ -129,7 +127,7 @@ void loop()
       // Get difference of position and setpoint
       error[1] = error[0];
       error[0] = setpoint - S.theta[0];
-      de = error[0]-error[1];
+      float de = error[0]-error[1];
 
       // Controller
       S.u[0] = K_p*error[0];// + K_d*de/dt;
