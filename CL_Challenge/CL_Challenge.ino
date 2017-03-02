@@ -8,7 +8,6 @@ Details:
   3. Follow-through and come to rest at bottom again (360 degrees)
 
 */
-#include <DiscreteFilter.h>
 
 // Pin Definitions
 #define POT_PIN     0
@@ -17,10 +16,9 @@ Details:
 #define TA_PIN      4 // pin to connect to TA arduino
 #define START_PIN  A5 // place momentary switch to ground
 
-// Encoder Definitions
-#define ENC_PIN_A   2 //18
-#define ENC_PIN_B   3 //19
-#define CPR     201.6 // 48.0 * 4.2 counts per revolution
+// Potentiometer Definitions
+#define DEG_PER_CNT -0.3636
+#define POT_OFFSET  144
 
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 10000 // (ms)
@@ -28,29 +26,38 @@ Details:
 // Delays and periods
 #define SERIAL_WRITE_PERIOD 100   // ms
 #define TA_DELAY            2000  // ms Wait for TA arduino
-#define SAMPLE_PERIOD       10   // ms
+#define CONTROLLER_PERIOD   10    // ms
+#define POSITION_HOLD_TIME  1000  // ms
+
+// PID Constants: Lifting
+#define KP_LIFT   300
+#define KI_LIFT   1800
+#define KD_LIFT   20
+
+// PID Constants: Stopping
+#define KP_STOP   300
+#define KI_STOP   1800
+#define KD_STOP   20
+
+// Variable Declarations
 
 // Transition angles
 float thetaTop;    // degrees
 float thetaImpact; // degrees
 float thetaStop;    // degrees
 
-// Variable Declarations
-float setpoint = 0; // desired position
-float error[2] = {0,0};    // position error
-float K_p = 35;     // proportional control const
-float K_i = 0;      // integral control const
-float K_d = 0;      // derivative control const
+// Angle hold time;
+unsigned long timeattop = 0;
+int posholdcount = 0;
 
 long encoderCount = 0;        // Current encoder position
 unsigned long beginTime = 0;  // Time when loop() starts
 int motorSpeed  = 0;          // Percent
-int isStopped   = 1;
 int stopWriting = 0;
 
 // Runtime (timer) Variables
 unsigned long serialWriteRunTime = 0;
-unsigned long sampleRunTime = 0;
+unsigned long controllerRunTime = 0;
 
 // Define state struct type
 typedef struct S_t
@@ -62,62 +69,56 @@ typedef struct S_t
   int   state;        // state of wheel
 } S_t;
 
+// Define PID controller struct type
+typedef struct PID_t
+{
+  // Constants
+  float kp = 0;
+  float ki = 0;
+  float kd = 0;
+
+  // Setpoint/Target
+  float setpoint = 0;         // radians
+
+  // Saturation value
+  float errorsat = 0;
+
+  // Error storage
+  float error[2] = {0,0};     // radians
+  float errorsum = 0;
+  float t[2] = {0,0};         // seconds
+
+  // Enabled?
+  int enabled = 0;
+} PID_t;
+
 // Create state structure
 S_t S;
 
-// Create controller
-DiscreteFilter PID;
+// Create PID controller structure
+PID_t PID;
 
 ///////////
 // Setup //
 ///////////
 void setup() {
   // Transition angles
-  thetaTop    = deg2rad(-175);  // degrees
-  thetaImpact = deg2rad(180); // degrees
-  thetaStop   = deg2rad(360); // degrees
+  thetaTop    = deg2rad(-172);  // degrees
+  thetaImpact = deg2rad(-180); // degrees
+  thetaStop   = deg2rad(0); // degrees
 
   // Initialize pins
   pinMode(POT_PIN,INPUT);
-  pinMode(ENC_PIN_A,INPUT);
-  pinMode(ENC_PIN_B,INPUT);
   pinMode(START_PIN, INPUT_PULLUP);
   pinMode(DIR_PIN,OUTPUT);
   pinMode(PWM_PIN,OUTPUT);
   pinMode(TA_PIN, OUTPUT);
 
-  // Initialize interrupts for encoder readings
-  attachInterrupt(digitalPinToInterrupt(ENC_PIN_A), handleEncoderA, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENC_PIN_B), handleEncoderB, CHANGE);
-
-  // Create PID controller
-  PID.createPIDController(K_p, K_i, K_d, SAMPLE_PERIOD/1000.0);
-  PID.setSaturation(100);
-
   // Start serial connection
   Serial.begin(250000);
 
-  // Wait for input from user
-  Serial.println("Press start button");
-  while (isStopped)
-  {
-    isStopped = digitalRead(START_PIN);
-    delay(10);
-  }
-
-  Serial.println("Tell the TAs that we're ready...");
-  digitalWrite(TA_PIN,LOW);
-  delay(TA_DELAY);
-  digitalWrite(TA_PIN,HIGH);
-
-  // First state: get to -175 degrees
-  S.state = 1;
-
-  // Reset encoder value
-  encoderCount = 0;
-
-  // Set zero time to use as offset
-  beginTime = millis();
+  // Set state to 0 to begin program
+  S.state = 0;
 }
 
 //////////
@@ -125,101 +126,211 @@ void setup() {
 //////////
 void loop()
 {
-  while(!isStopped)
+  // Depending on state, perform action
+  switch(S.state)
   {
-    // Sample position every SAMPLE_PERIOD
-    if(millis() >= sampleRunTime)
+    case 0: // 0. Wait for button press.
     {
-      sampleRunTime = millis() + SAMPLE_PERIOD;
-      S.t[1]          = S.t[0];
-      S.t[0]          = float(micros())/1000000.0;
-      S.theta[1]      = S.theta[0];
-      S.theta[0]      = countsToRadians(encoderCount);
-      S.theta_dot[0] = (S.theta[0] - S.theta[1])/S.t[0] - S.t[1];
-
-      // Get difference of position and setpoint
-      error[1] = error[0];
-      error[0] = setpoint - S.theta[0];
-
-      // Controller
-      S.u[0] = K_p*error[0] + K_d*(error[0]-error[1]);
-      setMotor(S.u[0]);
-
-      //S.theta_dot[0]  = calculateVelocity(&S,S.t[0],S.theta[0]);
-    }
-
-    // Use PID controller to set motor output
-    //S.u[0] = PID.step(error);
-
-    // Depending on state, perform action
-    switch(S.state)
-    {
-      case 1: // 1. Raise mass from bottom to top (-175 degrees).
-      {
-        if (setpoint != thetaTop){setpoint = thetaTop;}
-        else if(setpoint==thetaTop && error[0] <= deg2rad(5))
-        {
-          Serial.println("thetaTop reached");
-          delay(800);
-          S.state = 2;
-        }
-        break;
-      }
-      case 2: // 2. Swing mass around +355 degrees to strike pendulum at top (+180 degrees).
-      {
-        if(S.theta[0] <= thetaImpact) {setMotor(100);}
-        else
-        {
-          Serial.println("Impact");
-          S.state = 3;
-        }
-        break;
-      }
-      case 3: // 3. Follow-through and come to rest at bottom again (360 degrees)
-      {
-        setpoint = thetaStop;
-        break;
-      }
-    }
-
-    // Print at defined intervals
-    if(millis() >= serialWriteRunTime && !stopWriting)
-    {
-      serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
-
-      // Write to serial port
-      Serial.print("\t");
-      Serial.print(rad2deg(S.theta[0]));
-      Serial.print(",\t");
-      Serial.print(rad2deg(error[0]));
-      Serial.print(",\t");
-      Serial.println(S.u[0]);
-      return;
-    }
-
-    // Stop time (time at thetaStop +/- 1.5 degrees and velocity <= 10 deg/s)
-    if(S.theta[0] >= thetaStop - 1.5 &&
-      S.theta[0] <= thetaStop + 1.5 &&
-      S.theta_dot[0] <= deg2rad(10))
-    {
-      isStopped = 1;
-      Serial.print("Theta reached. Total Time: ~");
-      Serial.print(millis()-beginTime);
-      Serial.print(" ms\n");
-    }
-
-    // Stop motor if time has gone too long
-    if(millis()>=CUTOFF_TIME+beginTime)
-    {
-      Serial.println("CUTOFF_TIME reached");
+      // Make sure motor is stopped
       stopMotor();
+      
+      // Wait for input from user
+      Serial.println("Press start button");
+      while (digitalRead(START_PIN)) delay(10);
+    
+//        Serial.println("Tell the TAs that we're ready...");
+//        digitalWrite(TA_PIN,LOW);
+//        delay(TA_DELAY);
+//        digitalWrite(TA_PIN,HIGH);
+    
+      // First state: get to -175 degrees
+      S.state = 1;
+      Serial.println("Moving to State 1");
+    
+      // Reset encoder value
+      encoderCount = 0;
+      
+      // Set zero time to use as offset
+      beginTime = millis();
+      
+      break;
+    }
+    case 1: // 1. Initialize controller for lift.
+    {
+      // Initialize PID controller for lift
+      PID.kp = KP_LIFT;
+      PID.ki = KI_LIFT;
+      PID.kd = KD_LIFT;
+      PID.errorsat = 100/PID.kp;
+      PID.enabled = 1;
+      
+      PID.setpoint = thetaTop;
+
+      // Initialization is done, so immediately go to state 2
+      S.state = 2;
+      Serial.println("Moving to State 2");
+      break;
+    }
+    case 2: // 2. Raise mass from bottom to top (-172 degrees).
+    {
+      if(abs(PID.error[0]) <= deg2rad(2))
+      {
+        // You've reached the top!
+        timeattop = millis();
+        Serial.println("thetaTop reached");
+        Serial.println("Moving to State 3");
+        S.state = 3;
+      }
+      break;
+    }
+    case 3: // 3. Wait at top for prescribed amount of time
+    {
+      // Make sure we're still at the top
+      if(abs(PID.error[0]) > deg2rad(2)) 
+      {
+        // if not, go back to state 2
+        S.state = 2;
+        Serial.println("Moving back to State 2");
+      }
+      // If we've been here long enough, then we can proceed.
+      else if( millis() - timeattop > POSITION_HOLD_TIME )
+      {
+        S.state = 4;
+        Serial.println("Moving to State 4");
+      }
+      break;
+    }
+    case 4: // 4. Start to swing mass around +355 degrees to strike pendulum at top.
+    {
+      // Run free for a while.  100% ALL THE WAY!  But make sure PID is disabled first
+      PID.enabled = 0;
+      setMotor(100);
+
+      // Wait a little to let the wheel go past the strike zone
+      delay(100);
+
+      // Prep work done - continue to next state
+      S.state = 5;
+      Serial.println("Moving to State 5");
+      break;
+    }
+    case 5: // 5. Wait for mass to strike pendulum at top (-180 degrees).
+    {
+      if(S.theta[0] <= thetaImpact)
+      {
+        Serial.println("Impact");
+        S.state = 6;
+        Serial.println("Moving to State 6");
+      }
+      break;
+    }
+    case 6: // 6. Initialize controller for follow-through
+    {
+      // Initialize PID controller for lift
+      PID.kp = KP_LIFT;
+      PID.ki = KI_LIFT;
+      PID.kd = KD_LIFT;
+      PID.errorsat = 100/PID.kp;
+      PID.enabled = 1;
+      
+      PID.setpoint = thetaStop;
+      
+      // Initialization is done, so immediately go to state 7
+      S.state = 7;
+      Serial.println("Moving to State 7");
+      break;
+    }
+    case 7: // 7. Wait for controller to stabilize at bottom (0 degrees)
+    {
+      if(abs(PID.error[0]) <= deg2rad(2))
+      {
+        // You've reached the end!
+        Serial.println("thetaStop reached");
+        stopMotor();
+        S.state = 0;
+        Serial.println("Moving to State 0");
+      }
+      break;
+    }
+    default:
+    {
+      S.state = 0;
+      Serial.println("Moving to State 0");
     }
   }
 
-  // Stop motor if isStopped is triggered.
-  stopMotor();
-  Serial.println("Motor Stopped");
-  delay(5000);
+  // Run controller every CONTROLLER_PERIOD
+  if(millis() >= controllerRunTime)
+  {
+    // Set time to run controller the next time
+    controllerRunTime = millis() + CONTROLLER_PERIOD;
+
+    // Start running controller
+    PID.t[1]  = PID.t[0];
+    PID.t[0]  = float(micros())/1000000.0;
+    float dt = PID.t[0]-PID.t[1];
+
+    // Save old angle value, read in new one.
+    S.theta[1]      = S.theta[0];
+    S.theta[0]      = readPotRadians(POT_PIN);
+    
+    // Get difference of position and setpoint
+    PID.error[1] = PID.error[0];
+    PID.error[0] = PID.setpoint - S.theta[0];
+    float de = PID.error[0]-PID.error[1];
+
+    // Calculate integral gain
+    if (abs(PID.kp * PID.error[0]) >= 150)
+      PID.errorsum = 0;
+    else if ( PID.errorsat > 0 )
+      PID.errorsum = constrain(PID.errorsum + PID.error[0] * dt,
+                              -1*PID.errorsat,PID.errorsat);
+    else
+      PID.errorsum += PID.error[0];
+      
+    // Only run if enabled
+    if(PID.enabled)
+    {
+      // Controller
+      S.u[0] = PID.kp*PID.error[0] + PID.ki*PID.errorsum + PID.kd*de/dt;
+      S.u[1] = setMotor(S.u[0]);
+    }
+  }
+
+  // Print at defined intervals
+  if(millis() >= serialWriteRunTime && !stopWriting)
+  {
+    serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
+
+    // Write to serial port
+    Serial.print("\t");
+    Serial.print(rad2deg(S.theta[0]));
+    Serial.print(",\t");
+    Serial.print(rad2deg(PID.error[0]));
+    Serial.print(",\t");
+    Serial.println(S.u[0]);
+    return;
+  }
+
+//  // Stop time (time at thetaStop +/- 1.5 degrees and velocity <= 10 deg/s)
+//  if(S.theta[0] >= thetaStop - 1.5 &&
+//    S.theta[0] <= thetaStop + 1.5 &&
+//    S.theta_dot[0] <= deg2rad(10))
+//  {
+//    Serial.print("Theta reached. Total Time: ~");
+//    Serial.print(millis()-beginTime);
+//    Serial.print(" ms\n");
+//  }
+
+  // Stop motor if time has gone too long
+  if(millis()>=CUTOFF_TIME+beginTime)
+  {
+    Serial.println("CUTOFF_TIME reached");
+    stopMotor();
+    S.state = 0;
+    Serial.println("Moving to State 0");
+  }
+  
 }
 
 //////////////////////////////
@@ -247,51 +358,14 @@ float deg2rad(float degrees)
 }
 
 /*******************************************************************************
-* void handleEncoderA()
+* float readPotRadians(int pin)
 *
-* Encoder interrupt handler
+* Read pot angle in radians
 *******************************************************************************/
-void handleEncoderA()
+float readPotRadians(int pin)
 {
   // Standard read
-  int encA = digitalRead(ENC_PIN_A);
-  int encB = digitalRead(ENC_PIN_B);
-
-  encoderCount += 2*(encA ^ encB) - 1;
-}
-
-/*******************************************************************************
-* void handleEncoderB()
-*
-* Encoder interrupt handler
-*******************************************************************************/
-void handleEncoderB()
-{
-  // Standard read
-  int encA = digitalRead(ENC_PIN_A);
-  int encB = digitalRead(ENC_PIN_B);
-
-  encoderCount -= 2*(encA ^ encB) - 1;
-}
-
-/*******************************************************************************
-* float countsToRadians(long counts)
-*
-* Convert encoder counts to radians
-*******************************************************************************/
-float countsToRadians(long counts)
-{
-  return float(counts)*2*PI/CPR;
-}
-
-/*******************************************************************************
-* float countsToDegrees(long counts)
-*
-* Convert encoder counts to degrees
-*******************************************************************************/
-float countsToDegrees(long counts)
-{
-  return float(counts)*360.0/CPR;
+  return deg2rad(DEG_PER_CNT*(analogRead(pin) - POT_OFFSET));
 }
 
 /*******************************************************************************
@@ -302,8 +376,8 @@ float countsToDegrees(long counts)
 void stopMotor()
 {
   stopWriting = 1;
-  isStopped = 1;
-  digitalWrite(PWM_PIN,0);
+  setMotor(0);
+  PID.enabled = 0;
 }
 
 /*******************************************************************************
@@ -313,7 +387,7 @@ void stopMotor()
 * Has saturation protection
 *******************************************************************************/
 float setMotor(float motorSpeed)
-{
+{ 
   // Set motor direction
   if (motorSpeed>0){digitalWrite(DIR_PIN,LOW);}
   else{digitalWrite(DIR_PIN,HIGH);}
@@ -330,26 +404,4 @@ float setMotor(float motorSpeed)
 
   // Return the actual controller output with saturation protection
   return motorSpeed;
-}
-
-/*******************************************************************************
-* float calculateVelocity(S_t* S, float t, float x)
-*
-* Calculate the velocity for a S_t struct
-* It's best to use time in seconds
-*******************************************************************************/
-float calculateVelocity(S_t* S, float t, float theta)
-{
-  // Update values
-  S->theta_dot[1] = S->theta_dot[0];
-  S->theta[1]     = S->theta[0];
-  S->theta[0]     = theta;
-  S->t[1]         = S->t[0];
-  S->t[0]         = t;
-
-  float d_theta = S->theta[0] - S->theta[1];
-  float dt      = S->t[0] - S->t[1];
-
-  S->theta_dot[0] = d_theta/dt;
-  return S->theta_dot[0];
 }
