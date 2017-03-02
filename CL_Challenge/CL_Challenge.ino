@@ -47,7 +47,7 @@ float thetaImpact; // degrees
 float thetaStop;    // degrees
 
 // Angle hold time;
-unsigned long timeattop = 0;
+unsigned long timeatpos = 0;
 int posholdcount = 0;
 
 long encoderCount = 0;        // Current encoder position
@@ -176,7 +176,7 @@ void loop()
       if(abs(PID.error[0]) <= deg2rad(2))
       {
         // You've reached the top!
-        timeattop = millis();
+        timeatpos = millis();
         Serial.println("thetaTop reached");
         Serial.println("Moving to State 3");
         S.state = 3;
@@ -193,7 +193,7 @@ void loop()
         Serial.println("Moving back to State 2");
       }
       // If we've been here long enough, then we can proceed.
-      else if( millis() - timeattop > POSITION_HOLD_TIME )
+      else if( millis() - timeatpos > POSITION_HOLD_TIME )
       {
         S.state = 4;
         Serial.println("Moving to State 4");
@@ -240,14 +240,37 @@ void loop()
       Serial.println("Moving to State 7");
       break;
     }
-    case 7: // 7. Wait for controller to stabilize at bottom (0 degrees)
+    case 7: // 7. Wait for controller to reach bottom (0 degrees)
     {
       if(abs(PID.error[0]) <= deg2rad(2))
       {
         // You've reached the end!
         Serial.println("thetaStop reached");
+        timeatpos = millis();
+        S.state = 8;
+        Serial.println("Moving to State 8");
+      }
+      break;
+    }
+    case 8: // 8. Wait for controller to stabilize at bottom (0 degrees)
+    {
+      // Make sure we're hanging out at the bottom
+      if(abs(PID.error[0]) > deg2rad(2)) 
+      {
+        // if not, go back to state 7
+        S.state = 7;
+        Serial.println("Moving back to State 7");
+      }
+      // If we've been here long enough, then we can proceed.
+      else if( millis() - timeatpos > POSITION_HOLD_TIME )
+      {
+        // You've reached the end!
+        Serial.println("Stopping Motor");
         stopMotor();
         S.state = 0;
+        Serial.print("Execution time: ");
+        Serial.print(timeatpos - beginTime);
+        Serial.println(" ms");
         Serial.println("Moving to State 0");
       }
       break;
