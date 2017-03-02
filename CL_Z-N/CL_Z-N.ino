@@ -31,18 +31,17 @@ Code for testing basic controller
 #define CUTOFF_TIME 5000 // (ms)
 
 // Delays and periods
-#define SERIAL_WRITE_PERIOD 40   // ms
+#define SERIAL_WRITE_PERIOD 10   // ms
 #define SAMPLE_PERIOD       10   // ms
 
 // Variable Declarations
-float setpoint = 0; // desired position
-float error[2] = {0,0};    // position error
-float K_p = 600;     // proportional control const
-float K_i = 0;      // integral control const
-float K_d = 0;      // derivative control const
+float K_p = 300;        // proportional control const
+float K_i = 1800;       // integral control const
+float K_d = 20;//10.58;      // derivative control const
 
 long encoderCount = 0;        // Current encoder position
 unsigned long beginTime = 0;  // Time when loop() starts
+float maxangle = 0;
 int motorSpeed  = 0;          // Percent
 int isStopped   = 1;
 int stopWriting = 0;
@@ -60,8 +59,31 @@ typedef struct S_t
   float u[2] = {0,0};         // output to motor
 } S_t;
 
+// Define PID controller struct type
+typedef struct PID_t
+{
+  // Constants
+  float kp = 0;
+  float ki = 0;
+  float kd = 0;
+
+  // Setpoint/Target
+  float setpoint = 0;         // radians
+
+  // Saturation value
+  float errorsat = 0;
+
+  // Error storage
+  float error[2] = {0,0};     // radians
+  float errorsum = 0;
+  float t[2] = {0,0};         // seconds
+} PID_t;
+
 // Create state structure
 S_t S;
+
+// Create PID controller structure
+PID_t PID;
 
 ///////////
 // Setup //
@@ -93,9 +115,15 @@ void setup() {
   {
     isStopped = digitalRead(START_PIN);
     //Serial.println(analogRead(POT_PIN));
-    Serial.println(rad2deg(readPotRadians(POT_PIN)));  // measure pot angle count
+    //Serial.println(rad2deg(readPotRadians(POT_PIN)));  // measure pot angle count
     delay(10);
   }
+
+  // Initialize PID controller
+  PID.kp = K_p;
+  PID.ki = K_i;
+  PID.kd = K_d;
+  PID.errorsat = 100/PID.ki;
 
   // Reset encoder value
   encoderCount = 0;
@@ -109,7 +137,7 @@ void setup() {
 //////////
 void loop()
 {
-  setpoint = deg2rad(-180);
+  PID.setpoint = deg2rad(-172);
   while(!isStopped)
   {
     // Sample position every SAMPLE_PERIOD
@@ -118,19 +146,36 @@ void loop()
       sampleRunTime = millis() + SAMPLE_PERIOD;
       S.t[1]  = S.t[0];
       S.t[0]  = float(micros())/1000000.0;
+
+      PID.t[1]  = PID.t[0];
+      PID.t[0]  = float(micros())/1000000.0;
       float dt = S.t[0]-S.t[1];
 
+      // Save old angle value, read in new one.
       S.theta[1]      = S.theta[0];
       S.theta[0]      = readPotRadians(POT_PIN);
       //S.theta_dot[0] = (S.theta[0] - S.theta[1])/S.t[0] - S.t[1];
 
+      // Check if this was the maximum angle
+      if( S.theta[0] < maxangle ) maxangle = S.theta[0];
+      
       // Get difference of position and setpoint
-      error[1] = error[0];
-      error[0] = setpoint - S.theta[0];
-      float de = error[0]-error[1];
+      PID.error[1] = PID.error[0];
+      PID.error[0] = PID.setpoint - S.theta[0];
+      float de = PID.error[0]-PID.error[1];
+
+      // Calculate integral gain
+      if (abs(PID.kp * PID.error[0]) >= 150)
+        PID.errorsum = 0;
+      else if ( PID.errorsat > 0 )
+        PID.errorsum = constrain(PID.errorsum + PID.error[0] * dt,
+                                -1*PID.errorsat,PID.errorsat);
+      else
+        PID.errorsum += PID.error[0];
+      
 
       // Controller
-      S.u[0] = K_p*error[0];// + K_d*de/dt;
+      S.u[0] = PID.kp*PID.error[0] + PID.ki*PID.errorsum + PID.kd*de/dt;
       S.u[1] = setMotor(S.u[0]);
     }
 
@@ -140,14 +185,18 @@ void loop()
       serialWriteRunTime = millis() + SERIAL_WRITE_PERIOD;
 
       // Write to serial port
-      Serial.print("\t");
+      Serial.print(millis());
+      Serial.print(",");
+//      Serial.print("\t");
       Serial.print(rad2deg(S.theta[0]));
-      Serial.print(",\t");
-      Serial.print(rad2deg(error[0]));
-      Serial.print(",\t");
-      Serial.print(S.u[0]);
-      Serial.print(",\t");
-      Serial.println(dt);
+//      Serial.print(",\t");
+//      Serial.print(rad2deg(PID.error[0]));
+//      Serial.print(",\t");
+//      Serial.print(S.u[0]);
+//      Serial.print(",\t");
+//      //Serial.println(dt);
+//      Serial.println(S.t[0]-S.t[1]);
+      Serial.print("\n");
       return;
     }
 
@@ -155,6 +204,8 @@ void loop()
     if(millis()>=CUTOFF_TIME+beginTime)
     {
       Serial.println("CUTOFF_TIME reached");
+      Serial.print("Max angle attained: ");
+      Serial.println(rad2deg(maxangle));
       stopMotor();
     }
   }
