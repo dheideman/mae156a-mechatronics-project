@@ -36,7 +36,7 @@ Details:
 
 // PID Constants: Stopping
 #define KP_STOP   300
-#define KI_STOP   1800
+#define KI_STOP   2000
 #define KD_STOP   20
 
 // Variable Declarations
@@ -135,7 +135,8 @@ void loop()
       stopMotor();
 
       // Wait for input from user
-      Serial.println("Press start button");
+      Serial.println();
+      Serial.println("----- Press start button -----");
       while (digitalRead(START_PIN)) delay(10);
 
 //        Serial.println("Tell the TAs that we're ready...");
