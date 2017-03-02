@@ -226,10 +226,10 @@ void loop()
     }
     case 6: // 6. Initialize controller for follow-through
     {
-      // Initialize PID controller for lift
-      PID.kp = KP_LIFT;
-      PID.ki = KI_LIFT;
-      PID.kd = KD_LIFT;
+      // Initialize PID controller for Stopping
+      PID.kp = KP_STOP;
+      PID.ki = KI_STOP;
+      PID.kd = KD_STOP;
       PID.errorsat = 100/PID.kp;
       PID.enabled = 1;
       
