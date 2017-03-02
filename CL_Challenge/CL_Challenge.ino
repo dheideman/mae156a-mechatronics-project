@@ -46,7 +46,7 @@ float thetaTop;    // degrees
 float thetaImpact; // degrees
 float thetaStop;    // degrees
 
-// Angle hold time;
+// Holding at angle timer and counter;
 unsigned long timeatpos = 0;
 int posholdcount = 0;
 
@@ -133,26 +133,26 @@ void loop()
     {
       // Make sure motor is stopped
       stopMotor();
-      
+
       // Wait for input from user
       Serial.println("Press start button");
       while (digitalRead(START_PIN)) delay(10);
-    
+
 //        Serial.println("Tell the TAs that we're ready...");
 //        digitalWrite(TA_PIN,LOW);
 //        delay(TA_DELAY);
 //        digitalWrite(TA_PIN,HIGH);
-    
+
       // First state: get to -175 degrees
       S.state = 1;
       Serial.println("Moving to State 1");
-    
+
       // Reset encoder value
       encoderCount = 0;
-      
+
       // Set zero time to use as offset
       beginTime = millis();
-      
+
       break;
     }
     case 1: // 1. Initialize controller for lift.
@@ -163,7 +163,7 @@ void loop()
       PID.kd = KD_LIFT;
       PID.errorsat = 100/PID.kp;
       PID.enabled = 1;
-      
+
       PID.setpoint = thetaTop;
 
       // Initialization is done, so immediately go to state 2
@@ -186,7 +186,7 @@ void loop()
     case 3: // 3. Wait at top for prescribed amount of time
     {
       // Make sure we're still at the top
-      if(abs(PID.error[0]) > deg2rad(2)) 
+      if(abs(PID.error[0]) > deg2rad(2))
       {
         // if not, go back to state 2
         S.state = 2;
@@ -232,9 +232,9 @@ void loop()
       PID.kd = KD_STOP;
       PID.errorsat = 100/PID.kp;
       PID.enabled = 1;
-      
+
       PID.setpoint = thetaStop;
-      
+
       // Initialization is done, so immediately go to state 7
       S.state = 7;
       Serial.println("Moving to State 7");
@@ -255,7 +255,7 @@ void loop()
     case 8: // 8. Wait for controller to stabilize at bottom (0 degrees)
     {
       // Make sure we're hanging out at the bottom
-      if(abs(PID.error[0]) > deg2rad(1.5)) 
+      if(abs(PID.error[0]) > deg2rad(1.5))
       {
         // if not, go back to state 7
         S.state = 7;
@@ -296,21 +296,21 @@ void loop()
     // Save old angle value, read in new one.
     S.theta[1]      = S.theta[0];
     S.theta[0]      = readPotRadians(POT_PIN);
-    
+
     // Get difference of position and setpoint
     PID.error[1] = PID.error[0];
     PID.error[0] = PID.setpoint - S.theta[0];
-    float de = PID.error[0]-PID.error[1];
+    float de = PID.error[0] - PID.error[1];
 
     // Calculate integral gain
-    if (abs(PID.kp * PID.error[0]) >= 150)
+    if (abs(PID.kp * PID.error[0]) >= 150) // Windup protection
       PID.errorsum = 0;
     else if ( PID.errorsat > 0 )
       PID.errorsum = constrain(PID.errorsum + PID.error[0] * dt,
                               -1*PID.errorsat,PID.errorsat);
     else
       PID.errorsum += PID.error[0];
-      
+
     // Only run if enabled
     if(PID.enabled)
     {
@@ -353,7 +353,7 @@ void loop()
     S.state = 0;
     Serial.println("Moving to State 0");
   }
-  
+
 }
 
 //////////////////////////////
@@ -394,7 +394,7 @@ float readPotRadians(int pin)
 /*******************************************************************************
 * void stopMotor()
 *
-* Stop the motor, set flag "isStopped"
+* Stop the motor, set flag "stopWriting"
 *******************************************************************************/
 void stopMotor()
 {
@@ -410,7 +410,7 @@ void stopMotor()
 * Has saturation protection
 *******************************************************************************/
 float setMotor(float motorSpeed)
-{ 
+{
   // Set motor direction
   if (motorSpeed>0){digitalWrite(DIR_PIN,LOW);}
   else{digitalWrite(DIR_PIN,HIGH);}
