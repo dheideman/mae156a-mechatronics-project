@@ -19,8 +19,8 @@ Details:
 #define START_PIN  A5 // place momentary switch to ground
 
 // Potentiometer Definitions
-#define DEG_PER_CNT -0.3636
-#define POT_OFFSET  144
+#define DEG_PER_CNT -0.3273
+#define POT_OFFSET  147
 
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 10000 // (ms)
