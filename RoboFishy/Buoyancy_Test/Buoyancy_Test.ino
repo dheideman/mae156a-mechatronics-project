@@ -9,6 +9,7 @@
 // Pressure Sensor
 #define PSENSOR_PIN       A0
 #define PSENSOR_M_PER_ADC 10    // ADC counts per meter
+#define PSENSOR_M_OFFSET  0     // Offset to 0 m
 
 // Delays and periods
 #define SERIAL_READ_PERIOD  40   // ms
@@ -136,8 +137,9 @@ long metersToSteps(float meters)
 /*******************************************************************************
  * float readPressureSensorMeters()
  * 
- * convert step value to displacement in meters
+ * read pressure sensor, report in meters
  ******************************************************************************/
 float readPressureSensorMeters()
 {
+  return PSENSOR_M_PER_ADC*analogRead(PSENSOR_PIN) + PSENSOR_M_OFFSET;
 }
